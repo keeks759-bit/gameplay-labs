@@ -1,65 +1,134 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useState } from 'react';
+import ClipGrid from '@/components/clips/ClipGrid';
+import { VideoWithCategory } from '@/types/database';
+
+type VotesCursor = {
+  vote_count: number;
+  created_at: string;
+  id: number;
+};
+
+type NewestCursor = {
+  created_at: string;
+  id: number;
+};
+
+export default function HomePage() {
+  const [videos, setVideos] = useState<VideoWithCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<VotesCursor | NewestCursor | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  useEffect(() => {
+    async function fetchVideos() {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/videos?sort=votes&limit=12');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch videos');
+        }
+
+        const data = await response.json();
+        setVideos(data.videos || []);
+        setNextCursor(data.nextCursor ?? null);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching videos:', err);
+        setError('Failed to load clips. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchVideos();
+  }, []);
+
+  async function loadMore() {
+    if (!nextCursor || isLoadingMore) return;
+    try {
+      setIsLoadingMore(true);
+
+      const params = new URLSearchParams();
+      params.set('sort', 'votes');
+      params.set('limit', '12');
+
+      // Composite cursor for sort=votes
+      const cursor = nextCursor as VotesCursor;
+      if (typeof cursor.vote_count === 'number') {
+        params.set('cursor_vote_count', String(cursor.vote_count));
+      }
+      params.set('cursor_created_at', cursor.created_at);
+      params.set('cursor_id', String(cursor.id));
+
+      const url = `/api/videos?${params.toString()}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch videos');
+      }
+
+      const data = await response.json();
+      const newVideos: VideoWithCategory[] = data.videos || [];
+      const newNextCursor = data.nextCursor ?? null;
+
+      // Append and dedupe by id
+      setVideos((prev) => {
+        const seen = new Set(prev.map((v) => v.id));
+        const merged = [...prev];
+        for (const v of newVideos) {
+          if (!seen.has(v.id)) {
+            merged.push(v);
+            seen.add(v.id);
+          }
+        }
+        return merged;
+      });
+
+      setNextCursor(newNextCursor);
+    } catch (err) {
+      console.error('Error fetching more videos:', err);
+      setError('Failed to load more clips. Please try again later.');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Create a free profile to share your best game clips, view others' highlights, and vote on your favorites
+        </h1>
+        <p className="text-base text-zinc-600 dark:text-zinc-400 max-w-2xl">
+          Browse the latest gaming highlights ranked by community votes.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      )}
+
+      <ClipGrid videos={videos} isLoading={isLoading} />
+
+      {/* Load more */}
+      {!isLoading && (nextCursor !== null) && (
+        <div className="flex justify-center pt-2">
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {isLoadingMore ? 'Loading...' : 'Load more'}
+          </button>
         </div>
-      </main>
+      )}
     </div>
   );
 }

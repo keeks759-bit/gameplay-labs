@@ -1,0 +1,400 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
+
+type Category = {
+  id: number;
+  name: string;
+};
+
+// Profanity filter - simple word-boundary aware check
+// Case-insensitive, handles punctuation around words
+const PROFANITY_LIST = [
+  'damn', 'hell', 'crap', 'piss', 'ass', 'bitch', 'bastard',
+  'fuck', 'shit', 'dick', 'cock', 'pussy', 'cunt', 'whore',
+  'slut', 'fag', 'nazi', 'kike', 'spic', 'chink', 'gook',
+  'retard', 'idiot', 'moron', 'stupid', 'dumbass', 'asshole',
+  'motherfucker', 'bullshit', 'fucking', 'shitting'
+];
+
+function containsProfanity(text: string): boolean {
+  if (!text || text.trim().length === 0) {
+    return false;
+  }
+
+  // Normalize: lowercase
+  const normalized = text.toLowerCase().trim();
+  
+  // Check each profanity term with word boundaries
+  for (const term of PROFANITY_LIST) {
+    // Word boundary regex - matches whole words only
+    // \b ensures word boundaries, handles punctuation naturally
+    const wordBoundaryPattern = new RegExp(`\\b${term}\\b`, 'i');
+    
+    if (wordBoundaryPattern.test(normalized)) {
+      return true;
+    }
+    
+    // Basic obfuscation check: allow punctuation/spaces between letters
+    // Only check if simple (not over-engineered)
+    const obfuscatedPattern = new RegExp(
+      term.split('').join('[\\W\\s]*'),
+      'i'
+    );
+    
+    if (obfuscatedPattern.test(normalized)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+export default function UploadPage() {
+  const router = useRouter();
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<{ id: string } | null>(null);
+  
+  // Category state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  
+  // Title profanity error state
+  const [titleError, setTitleError] = useState<string | null>(null);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        // Not logged in - redirect to login
+        router.push('/login?redirect=/upload');
+        return;
+      }
+
+      setUser(user);
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [router]);
+
+  // Fetch categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        setLoadingCategories(true);
+        setCategoryError(null);
+
+        const { data, error: fetchError } = await supabase
+          .from('categories')
+          .select('id, name')
+          .order('id', { ascending: true });
+
+        if (fetchError) {
+          throw new Error(fetchError.message || 'Failed to load categories');
+        }
+
+        if (!data || data.length === 0) {
+          throw new Error('No categories available');
+        }
+
+        // Convert id to number (handle bigint -> number conversion)
+        const categoriesList: Category[] = data.map((cat) => ({
+          id: Number(cat.id),
+          name: cat.name,
+        }));
+
+        setCategories(categoriesList);
+
+        // Default to first category
+        const defaultCategoryId = categoriesList[0]?.id ?? null;
+        setCategoryId(defaultCategoryId);
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+        setCategoryError(err instanceof Error ? err.message : 'Failed to load categories');
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    // Validate file type
+    if (!selectedFile.type.startsWith('video/')) {
+      setError('Please select a video file');
+      setFile(null);
+      return;
+    }
+
+    // Validate file size (50MB = 50 * 1024 * 1024 bytes)
+    const maxSize = 50 * 1024 * 1024;
+    if (selectedFile.size > maxSize) {
+      setError('File size must be less than 50MB');
+      setFile(null);
+      return;
+    }
+
+    setError(null);
+    setFile(selectedFile);
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      setError('You must be logged in to upload');
+      return;
+    }
+
+    if (!title.trim()) {
+      setTitleError('Please enter a title');
+      return;
+    }
+
+    // Check for profanity in title
+    const trimmedTitle = title.trim();
+    if (containsProfanity(trimmedTitle)) {
+      setTitleError('Title contains inappropriate language. Please use a different title.');
+      return;
+    }
+
+    if (!file) {
+      setError('Please select a video file');
+      return;
+    }
+
+    // Validate category selection
+    if (!categoryId) {
+      setCategoryError('Please choose a category.');
+      return;
+    }
+
+    // Prevent submit if categories are still loading or failed to load
+    if (loadingCategories || categories.length === 0) {
+      setCategoryError('Categories are not available. Please refresh the page.');
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setCategoryError(null);
+    setTitleError(null);
+
+    try {
+      // Sanitize filename: remove special characters, keep alphanumeric, dots, dashes, underscores
+      const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      
+      // Create storage path: ${user.id}/${Date.now()}-${sanitizedFilename}
+      const storagePath = `${user.id}/${Date.now()}-${sanitizedFilename}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('videos')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message || 'Failed to upload file');
+      }
+
+      // Get current authenticated user to ensure RLS passes
+      // WHY: RLS requires created_by = auth.uid(), so we must use the current session user
+      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !currentUser) {
+        // If user session is invalid, clean up uploaded file and error
+        await supabase.storage.from('videos').remove([storagePath]);
+        throw new Error('Authentication expired. Please log in again.');
+      }
+
+      // Insert into database
+      // WHY: created_by must match auth.uid() for RLS to pass
+      // Store ONLY the storage path (not full URL) - URLs will be generated on display
+      const { error: insertError } = await supabase
+        .from('videos')
+        .insert({
+          title: title.trim(),
+          created_by: currentUser.id, // Use current session user for RLS
+          video_url: storagePath, // Store storage path only (e.g., "userId/timestamp-filename.mov")
+          category_id: categoryId, // Selected category ID
+          playback_id: '', // Keep for backward compatibility, but not used for Storage
+          vote_count: 0, // Default
+          hidden: false, // Keep for backward compatibility
+        });
+
+      if (insertError) {
+        // If insert fails, try to delete the uploaded file
+        await supabase.storage.from('videos').remove([storagePath]);
+        throw new Error(insertError.message || 'Failed to save video information');
+      }
+
+      // Success - redirect to home
+      router.push('/');
+    } catch (err: any) {
+      setError(err.message || 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-sm text-zinc-600 dark:text-zinc-400">Loading...</div>
+      </div>
+    );
+  }
+
+  // If no user, will redirect (handled in useEffect)
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Upload Your Clip
+        </h1>
+        <p className="text-base text-zinc-600 dark:text-zinc-400">
+          Share your best gaming moments with the community.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </div>
+        )}
+
+        {uploading && (
+          <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              Uploading your clip...
+            </p>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Title Input */}
+          <div className="space-y-2">
+            <label htmlFor="title" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Title <span className="text-red-500">*</span>
+            </label>
+            {titleError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{titleError}</p>
+            )}
+            <input
+              type="text"
+              id="title"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setTitleError(null); // Clear error as user edits
+              }}
+              required
+              disabled={uploading}
+              className={`w-full rounded-lg border px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 ${
+                titleError
+                  ? 'border-red-300 bg-white focus:border-red-500 focus:ring-red-500 dark:border-red-700 dark:focus:border-red-600 dark:focus:ring-red-600'
+                  : 'border-zinc-300 bg-white focus:border-zinc-500 focus:ring-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-600 dark:focus:ring-zinc-600'
+              }`}
+              placeholder="Enter clip title"
+            />
+          </div>
+
+          {/* Category Dropdown */}
+          <div className="space-y-2">
+            <label htmlFor="category" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Category <span className="text-red-500">*</span>
+            </label>
+            {categoryError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{categoryError}</p>
+            )}
+            {loadingCategories ? (
+              <div className="w-full rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+                Loading categories...
+              </div>
+            ) : categories.length === 0 ? (
+              <div className="w-full rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-600 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400">
+                No categories available. Please refresh the page.
+              </div>
+            ) : (
+              <select
+                id="category"
+                value={categoryId || ''}
+                onChange={(e) => {
+                  setCategoryId(Number(e.target.value));
+                  setCategoryError(null);
+                }}
+                required
+                disabled={uploading || loadingCategories}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+              >
+                <option value="">Select a category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* File Picker */}
+          <div className="space-y-2">
+            <label htmlFor="file" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Video File <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="file"
+              id="file"
+              accept="video/*"
+              onChange={handleFileChange}
+              required
+              disabled={uploading}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600 file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:font-medium file:bg-zinc-100 file:text-zinc-900 hover:file:bg-zinc-200 dark:file:bg-zinc-700 dark:file:text-zinc-50"
+            />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Max 50MB
+            </p>
+            {file && (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
+          </div>
+
+          {/* Upload Button */}
+          <button
+            type="submit"
+            disabled={uploading || !title.trim() || !file || !categoryId || loadingCategories || categories.length === 0}
+            className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+          >
+            {uploading ? 'Uploading...' : 'Upload Clip'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

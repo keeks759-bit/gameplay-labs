@@ -99,11 +99,11 @@ export default function HomePage() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <div className="space-y-2 md:space-y-3">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
           Create a free profile to share your best game clips, view others' highlights, and vote on your favorites
         </h1>
-        <p className="text-base text-zinc-600 dark:text-zinc-400 max-w-2xl">
+        <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed md:leading-normal px-2 md:px-0">
           Browse the latest gaming highlights ranked by community votes.
         </p>
       </div>

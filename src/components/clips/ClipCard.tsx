@@ -162,15 +162,17 @@ export default function ClipCard({ video }: ClipCardProps) {
           <div>
             {publicVideoUrl ? (
               <>
-                <video
-                  src={publicVideoUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="w-full rounded-lg"
-                >
-                  Your browser does not support the video tag.
-                </video>
+                <div className="aspect-[9/16] md:aspect-video w-full overflow-hidden">
+                  <video
+                    src={publicVideoUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-full object-contain rounded-lg"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
                 <div className="px-4 py-2">
                   <a
                     href={publicVideoUrl}
@@ -206,9 +208,9 @@ export default function ClipCard({ video }: ClipCardProps) {
       </div>
 
       {/* Content */}
-      <div className="p-4">
+      <div className="p-3 md:p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-semibold text-zinc-900 dark:text-zinc-50 line-clamp-2">
+          <h3 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 pr-2">
             {video.title}
           </h3>
         </div>
@@ -220,16 +222,16 @@ export default function ClipCard({ video }: ClipCardProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex items-center justify-between text-xs md:text-sm">
           <span className="text-zinc-600 dark:text-zinc-400">
             {video.categories?.name || 'Uncategorized'}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2">
             {/* Vote button - disabled if already voted or voting in progress */}
             <button
               onClick={handleVote}
               disabled={hasVoted || isVoting}
-              className={`flex items-center gap-1 rounded px-2 py-1 transition-colors ${
+              className={`flex items-center gap-1 rounded px-2.5 py-2 md:px-2 md:py-1 transition-colors touch-manipulation ${
                 hasVoted
                   ? 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'
                   : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50'
@@ -237,7 +239,7 @@ export default function ClipCard({ video }: ClipCardProps) {
               title={hasVoted ? 'You have already voted' : 'Vote for this clip'}
             >
               <svg
-                className="h-4 w-4"
+                className="h-4 w-4 md:h-4 md:w-4"
                 fill={hasVoted ? 'currentColor' : 'none'}
                 viewBox="0 0 24 24"
                 stroke="currentColor"

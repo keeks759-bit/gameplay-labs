@@ -271,16 +271,16 @@ export default function UploadPage() {
 
   return (
     <div className="space-y-8">
-      <div className="space-y-3">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <div className="space-y-2 md:space-y-3">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
           Upload Your Clip
         </h1>
-        <p className="text-base text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400">
           Share your best gaming moments with the community.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-4 md:p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
             <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
@@ -389,7 +389,7 @@ export default function UploadPage() {
           <button
             type="submit"
             disabled={uploading || !title.trim() || !file || !categoryId || loadingCategories || categories.length === 0}
-            className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+            className="w-full rounded-lg bg-zinc-900 px-4 py-3.5 md:py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100 touch-manipulation"
           >
             {uploading ? 'Uploading...' : 'Upload Clip'}
           </button>

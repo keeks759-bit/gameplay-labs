@@ -98,18 +98,18 @@ export default function HomePage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-2 md:space-y-3">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+    <div className="space-y-6 md:space-y-8">
+      <div className="space-y-3 md:space-y-4">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 leading-tight">
           Create a free profile to share your best game clips, view others' highlights, and vote on your favorites
         </h1>
-        <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed md:leading-normal px-2 md:px-0">
+        <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
           Browse the latest gaming highlights ranked by community votes.
         </p>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+        <div className="rounded-2xl border border-red-200/50 bg-red-50/80 p-4 shadow-sm dark:border-red-800/50 dark:bg-red-900/20">
           <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
         </div>
       )}
@@ -118,12 +118,12 @@ export default function HomePage() {
 
       {/* Load more */}
       {!isLoading && (nextCursor !== null) && (
-        <div className="flex justify-center pt-2">
+        <div className="flex justify-center pt-4">
           <button
             type="button"
             onClick={loadMore}
             disabled={isLoadingMore}
-            className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+            className="rounded-full border border-zinc-200/50 bg-white px-6 py-2.5 text-sm font-medium text-zinc-900 transition-all hover:bg-zinc-50 hover:shadow-sm disabled:opacity-50 dark:border-zinc-800/50 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
           >
             {isLoadingMore ? 'Loading...' : 'Load more'}
           </button>

@@ -154,7 +154,7 @@ export default function ClipCard({ video }: ClipCardProps) {
   };
 
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white overflow-hidden shadow-sm transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-2xl border border-zinc-200/50 bg-white overflow-hidden shadow-sm transition-all hover:shadow-md dark:border-zinc-800/50 dark:bg-zinc-900">
       {/* Video or Thumbnail */}
       <div className="bg-zinc-100 dark:bg-zinc-800">
         {video.video_url ? (
@@ -162,13 +162,13 @@ export default function ClipCard({ video }: ClipCardProps) {
           <div>
             {publicVideoUrl ? (
               <>
-                <div className="aspect-[9/16] md:aspect-video w-full overflow-hidden">
+                <div className="aspect-[9/16] md:aspect-video w-full overflow-hidden rounded-t-2xl">
                   <video
                     src={publicVideoUrl}
                     controls
                     playsInline
                     preload="metadata"
-                    className="w-full h-full object-contain rounded-lg"
+                    className="w-full h-full object-contain"
                   >
                     Your browser does not support the video tag.
                   </video>
@@ -231,11 +231,11 @@ export default function ClipCard({ video }: ClipCardProps) {
             <button
               onClick={handleVote}
               disabled={hasVoted || isVoting}
-              className={`flex items-center gap-1 rounded px-2.5 py-2 md:px-2 md:py-1 transition-colors touch-manipulation ${
+              className={`flex items-center gap-1.5 rounded-full px-3 py-2 md:px-3 md:py-1.5 transition-all touch-manipulation ${
                 hasVoted
-                  ? 'text-zinc-400 dark:text-zinc-600 cursor-not-allowed'
-                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
+                  : 'bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 dark:bg-zinc-800/50 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50'
+              } disabled:opacity-50 disabled:cursor-not-allowed shadow-sm`}
               title={hasVoted ? 'You have already voted' : 'Vote for this clip'}
             >
               <svg

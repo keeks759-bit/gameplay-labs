@@ -16,11 +16,11 @@ type ClipGridProps = {
 export default function ClipGrid({ videos, isLoading }: ClipGridProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {[...Array(6)].map((_, i) => (
           <div
             key={i}
-            className="rounded-lg border border-zinc-200 bg-white overflow-hidden shadow-sm animate-pulse dark:border-zinc-800 dark:bg-zinc-900"
+            className="rounded-2xl border border-zinc-200/50 bg-white overflow-hidden shadow-sm animate-pulse dark:border-zinc-800/50 dark:bg-zinc-900"
           >
             <div className="aspect-video bg-zinc-200 dark:bg-zinc-800" />
             <div className="p-4 space-y-3">

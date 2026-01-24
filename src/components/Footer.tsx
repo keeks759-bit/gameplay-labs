@@ -8,12 +8,30 @@ export default function Footer() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             © {new Date().getFullYear()} Gameplay Labs. All rights reserved.
           </p>
-          <nav className="flex items-center gap-6">
+          <nav className="flex items-center gap-4 sm:gap-6 flex-wrap justify-center">
             <Link
               href="/about"
               className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
             >
               About Us
+            </Link>
+            <Link
+              href="/terms"
+              className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
+            >
+              Terms of Service
+            </Link>
+            <Link
+              href="/privacy"
+              className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              href="/guidelines"
+              className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
+            >
+              Community Guidelines
             </Link>
           </nav>
         </div>

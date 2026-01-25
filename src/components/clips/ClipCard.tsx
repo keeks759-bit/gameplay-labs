@@ -258,6 +258,11 @@ export default function ClipCard({ video }: ClipCardProps) {
 
       {/* Content */}
       <div className="p-2.5 md:p-4">
+        {video.game_title && video.game_title.trim() && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-1.5">
+            {video.game_title}
+          </p>
+        )}
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 pr-2">
             {video.title}

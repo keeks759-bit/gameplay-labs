@@ -14,6 +14,7 @@ export type Category = {
 export type Video = {
   id: string;
   title: string;
+  game_title: string | null;
   category_id: string | null;
   playback_id: string;
   video_url: string | null; // Supabase Storage path (e.g., "userId/timestamp-filename.mov")

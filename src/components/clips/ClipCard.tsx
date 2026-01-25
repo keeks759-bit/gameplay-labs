@@ -162,18 +162,52 @@ export default function ClipCard({ video }: ClipCardProps) {
           <div>
             {publicVideoUrl ? (
               <>
-                <div className="aspect-[9/16] md:aspect-video w-full overflow-hidden rounded-t-2xl">
+                <div className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
+                  {/* Placeholder background - visible when no thumbnail */}
+                  {!video.thumbnail_url && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <svg
+                          className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-500">Tap to play</p>
+                      </div>
+                    </div>
+                  )}
                   <video
                     src={publicVideoUrl}
                     controls
                     playsInline
                     preload="metadata"
-                    className="w-full h-full object-contain"
+                    poster={video.thumbnail_url || undefined}
+                    className="w-full h-full object-contain relative z-10"
                   >
                     Your browser does not support the video tag.
                   </video>
+                  {/* Play overlay - mobile only */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none md:hidden z-20">
+                    <div className="bg-black/20 backdrop-blur-[2px] rounded-full p-3">
+                      <svg
+                        className="w-8 h-8 text-white drop-shadow-lg"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                <div className="px-4 py-2">
+                <div className="px-3 md:px-4 py-1.5 md:py-2">
                   <a
                     href={publicVideoUrl}
                     target="_blank"
@@ -185,7 +219,7 @@ export default function ClipCard({ video }: ClipCardProps) {
                 </div>
               </>
             ) : (
-              <div className="aspect-video flex items-center justify-center">
+              <div className="aspect-video flex items-center justify-center bg-zinc-200 dark:bg-zinc-800">
                 <p className="text-sm text-red-500 dark:text-red-400">Failed to load video</p>
               </div>
             )}
@@ -200,15 +234,30 @@ export default function ClipCard({ video }: ClipCardProps) {
             />
           </div>
         ) : (
-          // Show "No video attached" if no video_url
-          <div className="aspect-video flex items-center justify-center">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No video attached</p>
+          // Show neutral placeholder if no video_url or thumbnail
+          <div className="aspect-video flex items-center justify-center bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
+            <div className="text-center">
+              <svg
+                className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                />
+              </svg>
+              <p className="text-xs text-zinc-500 dark:text-zinc-500">No preview</p>
+            </div>
           </div>
         )}
       </div>
 
       {/* Content */}
-      <div className="p-3 md:p-4">
+      <div className="p-2.5 md:p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 pr-2">
             {video.title}

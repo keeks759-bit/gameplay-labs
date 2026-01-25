@@ -16,7 +16,7 @@ export default function AboutPage() {
 
         {/* Build Status Paragraph */}
         <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed text-center max-w-2xl mx-auto mt-8">
-          Gameplay Labs is currently in active build. We're focused on getting the fundamentals right and continuing to improve the experience based on real community use. If you notice something that could be better, we welcome constructive feedback as we keep building.
+          Gameplay Labs is currently in active build. We're focused on getting the fundamentals right and continuing to improve the experience based on real community use. If you notice something that could be better or have ideas to share, you can reach us directly at <a href="mailto:support@gameplaylabs.io" className="text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">support@gameplaylabs.io</a> — we read everything as we keep building.
         </p>
       </div>
     </div>

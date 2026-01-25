@@ -13,6 +13,11 @@ export default function AboutPage() {
         <p className="text-lg sm:text-xl text-zinc-700 dark:text-zinc-300 leading-relaxed text-center max-w-2xl mx-auto">
           Gameplay Labs was built for those moments every gamer knows — the insane kill streak, the perfectly timed play, the FIFA goal you still think about, and that wild GTA sequence you wish you could rewatch. After one too many clips worth saving and no great place to revisit or share them, our founder wanted something better. A place to upload your proudest gaming moments, watch what other players are pulling off, and let the community of users vote on which clips truly deserve the spotlight. No noise, no fluff — just great gameplay, shared and voted on by the people who actually play.
         </p>
+
+        {/* Build Status Paragraph */}
+        <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed text-center max-w-2xl mx-auto mt-8">
+          Gameplay Labs is currently in active build. We're focused on getting the fundamentals right and continuing to improve the experience based on real community use. If you notice something that could be better, we welcome constructive feedback as we keep building.
+        </p>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useVote } from '@/hooks/useVote';
 import { supabase } from '@/lib/supabaseClient';
 import { VideoWithCategory } from '@/types/database';
@@ -18,6 +18,8 @@ import { VideoWithCategory } from '@/types/database';
 type ClipCardProps = {
   video: VideoWithCategory;
 };
+
+const ADMIN_UUID = 'e570e7ed-d901-4af3-b1a1-77e57772a51c';
 
 export default function ClipCard({ video }: ClipCardProps) {
   // Use voting hook - handles RPC call, vote checking, optimistic updates, and auth
@@ -33,6 +35,21 @@ export default function ClipCard({ video }: ClipCardProps) {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSuccess, setReportSuccess] = useState(false);
+
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Check if current user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.id === ADMIN_UUID) {
+        setIsAdmin(true);
+      }
+    };
+    checkAdmin();
+  }, []);
 
   /**
    * Extract storage path from video_url
@@ -151,6 +168,35 @@ export default function ClipCard({ video }: ClipCardProps) {
     setShowReportForm(true);
     setReportError(null);
     setReportSuccess(false);
+  };
+
+  // Handle admin delete
+  const handleAdminDelete = async () => {
+    if (!isAdmin) return;
+
+    const confirmed = window.confirm('Are you sure you want to delete this video? This action cannot be undone.');
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      const { error: rpcError } = await supabase.rpc('admin_delete_video', {
+        p_video_id: Number(video.id),
+      });
+
+      if (rpcError) {
+        console.error('Delete error:', rpcError);
+        alert('Failed to delete video: ' + rpcError.message);
+        setIsDeleting(false);
+        return;
+      }
+
+      // Success - refresh page to remove deleted video from feed
+      window.location.reload();
+    } catch (err) {
+      console.error('Delete error:', err);
+      alert('Failed to delete video');
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -328,6 +374,18 @@ export default function ClipCard({ video }: ClipCardProps) {
                 />
               </svg>
             </button>
+
+            {/* Admin delete button */}
+            {isAdmin && (
+              <button
+                onClick={handleAdminDelete}
+                disabled={isDeleting}
+                className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+                title="Delete this video (admin only)"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
           </div>
         </div>
 

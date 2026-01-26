@@ -55,6 +55,7 @@ function containsProfanity(text: string): boolean {
 export default function UploadPage() {
   const router = useRouter();
   const [title, setTitle] = useState('');
+  const [gameTitle, setGameTitle] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +234,7 @@ export default function UploadPage() {
         .from('videos')
         .insert({
           title: title.trim(),
+          game_title: gameTitle.trim() || null,
           created_by: currentUser.id, // Use current session user for RLS
           video_url: storagePath, // Store storage path only (e.g., "userId/timestamp-filename.mov")
           category_id: categoryId, // Selected category ID
@@ -320,6 +322,22 @@ export default function UploadPage() {
                   : 'border-zinc-300 bg-white focus:border-zinc-500 focus:ring-zinc-500 dark:border-zinc-700 dark:focus:border-zinc-600 dark:focus:ring-zinc-600'
               }`}
               placeholder="Enter clip title"
+            />
+          </div>
+
+          {/* Game Title Input */}
+          <div className="space-y-2">
+            <label htmlFor="gameTitle" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Game Title <span className="text-zinc-400 dark:text-zinc-500 text-xs">(optional)</span>
+            </label>
+            <input
+              type="text"
+              id="gameTitle"
+              value={gameTitle}
+              onChange={(e) => setGameTitle(e.target.value)}
+              disabled={uploading}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:border-zinc-700 focus:border-zinc-500 focus:ring-zinc-500 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+              placeholder="e.g. Call of Duty, Fortnite, FIFA"
             />
           </div>
 

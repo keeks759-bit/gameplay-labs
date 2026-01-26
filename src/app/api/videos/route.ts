@@ -29,6 +29,10 @@ export async function GET(request: Request) {
     const cursorVoteCountParam = searchParams.get('cursor_vote_count');
     const cursorVoteCount = cursorVoteCountParam ? parseInt(cursorVoteCountParam, 10) : null;
 
+    // Parse category filter
+    const categoryIdParam = searchParams.get('category_id');
+    const categoryId = categoryIdParam ? parseInt(categoryIdParam, 10) : null;
+
     // Build query
     let query = supabase
       .from('videos')
@@ -37,6 +41,11 @@ export async function GET(request: Request) {
         categories:categories!category_id (*)
       `)
       .eq('hidden', false);
+
+    // Apply category filter if provided
+    if (categoryId !== null && !isNaN(categoryId)) {
+      query = query.eq('category_id', categoryId);
+    }
 
     // Apply cursor filters and sorting based on sort mode
     if (sortBy === 'votes') {

@@ -23,7 +23,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} min-h-screen bg-[#fafafa] text-[#0a0a0a] dark:bg-[#0a0a0a] dark:text-[#fafafa] transition-colors font-sans flex flex-col`}>
+      <body className={`${inter.variable} min-h-screen bg-[#fafafa] text-[#0a0a0a] dark:bg-[#0a0a0a] dark:text-[#fafafa] transition-colors font-sans flex flex-col`} style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
         <NavBar />
         <main className="flex-1 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 sm:py-12">{children}</main>
         <Footer />

@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import ClipGrid from '@/components/clips/ClipGrid';
 import { VideoWithCategory } from '@/types/database';
+import { supabase } from '@/lib/supabaseClient';
 
 type VotesCursor = {
   vote_count: number;
@@ -15,18 +17,68 @@ type NewestCursor = {
   id: number;
 };
 
-export default function HomePage() {
+type Category = {
+  id: number;
+  name: string;
+};
+
+function HomePageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [videos, setVideos] = useState<VideoWithCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<VotesCursor | NewestCursor | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
+  // Filter/Sort state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const currentSort = searchParams.get('sort') || 'votes';
+  const currentCategoryId = searchParams.get('category_id');
 
+  // Fetch categories
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('categories')
+          .select('id, name')
+          .order('id', { ascending: true });
+
+        if (fetchError) throw new Error(fetchError.message || 'Failed to load categories');
+
+        if (data) {
+          const categoriesList: Category[] = data.map((cat) => ({
+            id: Number(cat.id),
+            name: cat.name,
+          }));
+          setCategories(categoriesList);
+        }
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+      } finally {
+        setLoadingCategories(false);
+      }
+    }
+    fetchCategories();
+  }, []);
+
+  // Fetch videos when sort/category changes
   useEffect(() => {
     async function fetchVideos() {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/videos?sort=votes&limit=12');
+        setNextCursor(null); // Reset cursor when filter/sort changes
+        
+        const params = new URLSearchParams();
+        params.set('sort', currentSort);
+        params.set('limit', '12');
+        if (currentCategoryId) {
+          params.set('category_id', currentCategoryId);
+        }
+
+        const response = await fetch(`/api/videos?${params.toString()}`);
         
         if (!response.ok) {
           throw new Error('Failed to fetch videos');
@@ -45,7 +97,7 @@ export default function HomePage() {
     }
 
     fetchVideos();
-  }, []);
+  }, [currentSort, currentCategoryId]);
 
   async function loadMore() {
     if (!nextCursor || isLoadingMore) return;
@@ -53,12 +105,15 @@ export default function HomePage() {
       setIsLoadingMore(true);
 
       const params = new URLSearchParams();
-      params.set('sort', 'votes');
+      params.set('sort', currentSort);
       params.set('limit', '12');
+      if (currentCategoryId) {
+        params.set('category_id', currentCategoryId);
+      }
 
       // Composite cursor for sort=votes
       const cursor = nextCursor as VotesCursor;
-      if (typeof cursor.vote_count === 'number') {
+      if (currentSort === 'votes' && typeof cursor.vote_count === 'number') {
         params.set('cursor_vote_count', String(cursor.vote_count));
       }
       params.set('cursor_created_at', cursor.created_at);
@@ -97,15 +152,76 @@ export default function HomePage() {
     }
   }
 
+  const handleSortChange = (sort: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('sort', sort);
+    if (currentCategoryId) {
+      params.set('category_id', currentCategoryId);
+    }
+    router.push(`/?${params.toString()}`);
+  };
+
+  const handleCategoryChange = (categoryId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('sort', currentSort);
+    if (categoryId && categoryId !== 'all') {
+      params.set('category_id', categoryId);
+    } else {
+      params.delete('category_id');
+    }
+    router.push(`/?${params.toString()}`);
+  };
+
   return (
     <div className="space-y-6 md:space-y-8">
-      <div className="space-y-3 md:space-y-4">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 leading-tight">
-          Create a free profile to share your best game clips, view others' highlights, and vote on your favorites
-        </h1>
-        <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Browse the latest gaming highlights ranked by community votes.
-        </p>
+      {/* Header Section */}
+      <div className="rounded-3xl border border-zinc-200/50 bg-white/50 backdrop-blur-sm p-6 md:p-8 lg:p-10 shadow-sm dark:border-zinc-800/50 dark:bg-zinc-900/50">
+        <div className="space-y-3 md:space-y-4">
+          <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 leading-tight">
+            Create a free profile to share your best game clips, view others' highlights, and vote on your favorites
+          </h1>
+          <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl">
+            Discover and vote on the best gaming moments from the community.
+          </p>
+        </div>
+      </div>
+
+      {/* Filter + Sort Controls */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
+          <label htmlFor="sort" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
+            Sort:
+          </label>
+          <select
+            id="sort"
+            value={currentSort}
+            onChange={(e) => handleSortChange(e.target.value)}
+            className="flex-1 sm:flex-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+          >
+            <option value="votes">Top (Votes)</option>
+            <option value="newest">Newest</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3 flex-1 w-full sm:w-auto">
+          <label htmlFor="category" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
+            Category:
+          </label>
+          <select
+            id="category"
+            value={currentCategoryId || 'all'}
+            onChange={(e) => handleCategoryChange(e.target.value)}
+            disabled={loadingCategories}
+            className="flex-1 sm:flex-none rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+          >
+            <option value="all">All categories</option>
+            {categories.map((category) => (
+              <option key={category.id} value={String(category.id)}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -130,5 +246,27 @@ export default function HomePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="space-y-6 md:space-y-8">
+        <div className="rounded-3xl border border-zinc-200/50 bg-white/50 backdrop-blur-sm p-6 md:p-8 shadow-sm dark:border-zinc-800/50 dark:bg-zinc-900/50">
+          <div className="space-y-2 md:space-y-3">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Gaming Highlights
+            </h1>
+            <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl">
+              Discover and vote on the best gaming moments from the community.
+            </p>
+          </div>
+        </div>
+        <ClipGrid videos={[]} isLoading={true} />
+      </div>
+    }>
+      <HomePageContent />
+    </Suspense>
   );
 }

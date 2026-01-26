@@ -1,20 +1,17 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import { getSiteUrl } from '@/lib/siteUrl';
 
-export default function SignUpPage() {
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const isSubmittingRef = useRef(false);
-  const router = useRouter();
   const supabase = createBrowserSupabaseClient();
 
   // Cooldown timer
@@ -27,18 +24,7 @@ export default function SignUpPage() {
     }
   }, [cooldownSeconds]);
 
-  // Redirect if already logged in
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        router.push('/');
-      }
-    };
-    checkSession();
-  }, [router, supabase]);
-
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Single-flight protection
@@ -53,22 +39,18 @@ export default function SignUpPage() {
 
     // Dev-only logging
     if (process.env.NODE_ENV !== 'production') {
-      console.log('AUTH_EMAIL_SEND: signup');
+      console.log('AUTH_EMAIL_SEND: reset');
     }
 
     try {
       const siteUrl = getSiteUrl();
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${siteUrl}/auth/callback`,
-        },
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/auth/callback?recovery=true`,
       });
 
-      if (error) {
+      if (resetError) {
         // Check for rate limit errors
-        const errorMsg = (error.message || '').toLowerCase();
+        const errorMsg = (resetError.message || '').toLowerCase();
         const isRateLimit = 
           errorMsg.includes('rate limit') ||
           errorMsg.includes('over_email_send_rate_limit') ||
@@ -78,20 +60,17 @@ export default function SignUpPage() {
         if (isRateLimit) {
           throw new Error('Too many emails sent recently. Please wait a bit and try again.');
         }
-        throw error;
+        throw resetError;
       }
 
-      setMessage(
-        'Check your email for the confirmation link! You can close this page.'
-      );
-      // Clear form
+      // Show neutral success message (don't reveal if email exists)
+      setMessage('If an account with that email exists, we\'ve sent you a password reset link.');
       setEmail('');
-      setPassword('');
       
       // Start 60-second cooldown
       setCooldownSeconds(60);
     } catch (error: any) {
-      setError(error.message || 'An error occurred during sign up');
+      setError(error.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;
@@ -102,10 +81,10 @@ export default function SignUpPage() {
     <div className="mx-auto max-w-md space-y-8">
       <div className="space-y-3 text-center">
         <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Create Your Profile
+          Reset Password
         </h1>
         <p className="text-base text-zinc-600 dark:text-zinc-400">
-          Sign up for free to share clips, view highlights, and vote on your favorites.
+          Enter your email address and we'll send you a link to reset your password.
         </p>
       </div>
 
@@ -122,7 +101,7 @@ export default function SignUpPage() {
           </div>
         )}
 
-        <form onSubmit={handleSignUp} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
               Email
@@ -139,41 +118,21 @@ export default function SignUpPage() {
             />
           </div>
 
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              Password
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-              minLength={6}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
-              placeholder="••••••••"
-            />
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Must be at least 6 characters
-            </p>
-          </div>
-
           <button
             type="submit"
             disabled={loading || cooldownSeconds > 0}
             className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
           >
             {loading 
-              ? 'Creating account...' 
+              ? 'Sending...' 
               : cooldownSeconds > 0 
-                ? `Please wait ${cooldownSeconds}s before trying again`
-                : 'Create Profile'}
+                ? `Please wait ${cooldownSeconds}s before requesting another reset link`
+                : 'Send Reset Link'}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
-          Already have an account?{' '}
+          Remember your password?{' '}
           <Link href="/login" className="font-medium text-zinc-900 hover:underline dark:text-zinc-50">
             Log in
           </Link>

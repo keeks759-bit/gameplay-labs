@@ -20,6 +20,33 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Environment Variables
+
+### Required for Local Development
+
+Create a `.env.local` file in the project root with:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+```
+
+### Required for Production (Vercel)
+
+In Vercel Dashboard → Project Settings → Environment Variables, add:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+NEXT_PUBLIC_SITE_URL=https://gameplaylabs.io
+```
+
+**Important:** `NEXT_PUBLIC_SITE_URL` must be set to `https://gameplaylabs.io` in production. This ensures Supabase auth email confirmation links redirect to the correct production URL instead of localhost.
+
+In local development, `NEXT_PUBLIC_SITE_URL` can be omitted (defaults to `http://localhost:3000`).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

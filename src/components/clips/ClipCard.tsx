@@ -303,30 +303,30 @@ export default function ClipCard({ video }: ClipCardProps) {
       </div>
 
       {/* Content */}
-      <div className="p-2.5 md:p-4">
+      <div className="p-3 md:p-5">
         {video.game_title && video.game_title.trim() && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-1.5">
+          <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
             {video.game_title}
           </p>
         )}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-semibold text-sm md:text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 pr-2">
+        <div className="mb-3">
+          <h3 className="font-semibold text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-2 leading-snug">
             {video.title}
           </h3>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-2 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+          <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
             {error}
           </div>
         )}
 
-        <div className="flex items-center justify-between text-xs md:text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">
+        <div className="flex items-center justify-between text-xs md:text-sm pt-1 border-t border-zinc-100 dark:border-zinc-800">
+          <span className="text-zinc-500 dark:text-zinc-500">
             {video.categories?.name || 'Uncategorized'}
           </span>
-          <div className="flex items-center gap-1.5 md:gap-2">
+          <div className="flex items-center gap-2 md:gap-2.5">
             {/* Vote button - disabled if already voted or voting in progress */}
             <button
               onClick={handleVote}
@@ -380,7 +380,7 @@ export default function ClipCard({ video }: ClipCardProps) {
               <button
                 onClick={handleAdminDelete}
                 disabled={isDeleting}
-                className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+                className="text-xs text-red-500/70 hover:text-red-600 dark:text-red-400/70 dark:hover:text-red-400 transition-colors disabled:opacity-50 ml-1"
                 title="Delete this video (admin only)"
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}

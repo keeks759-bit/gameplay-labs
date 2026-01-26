@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { User } from "@supabase/supabase-js";
@@ -55,13 +56,17 @@ export default function NavBar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link 
           href="/about" 
-          className="transition-opacity hover:opacity-80 cursor-pointer"
+          className="transition-opacity hover:opacity-80 cursor-pointer flex items-center"
           aria-label="Gameplay Labs - Learn more about us"
         >
-          <img 
+          <Image 
             src="/gameplay-labs-logo.svg" 
             alt="Gameplay Labs" 
-            className="h-12 w-auto md:h-14"
+            width={336}
+            height={48}
+            className="h-12 w-auto object-contain md:h-14"
+            priority
+            quality={100}
           />
         </Link>
 

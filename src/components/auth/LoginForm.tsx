@@ -101,15 +101,6 @@ export default function LoginForm({ error: externalError, onError }: LoginFormPr
       >
         {loading ? 'Logging in...' : 'Log In'}
       </button>
-
-      <div className="text-center">
-        <Link
-          href="/auth/forgot-password"
-          className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-        >
-          Forgot password?
-        </Link>
-      </div>
     </form>
   );
 }

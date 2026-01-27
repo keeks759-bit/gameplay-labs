@@ -53,32 +53,32 @@ export default function NavBar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-200/50 bg-white/80 backdrop-blur-md dark:border-zinc-800/50 dark:bg-zinc-950/80 py-3 md:py-0">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8 gap-2">
         <Link 
           href="/about" 
-          className="transition-opacity hover:opacity-80 cursor-pointer inline-flex items-center whitespace-nowrap flex-shrink-0 leading-none antialiased"
+          className="transition-opacity hover:opacity-80 cursor-pointer inline-flex items-center min-w-0 leading-none antialiased"
           aria-label="Gameplay Labs - Learn more about us"
         >
-          <span className="text-2xl md:text-3xl font-bold leading-none">
+          <span className="text-xl sm:text-2xl md:text-3xl font-bold leading-none truncate">
             <span className="text-blue-600 dark:text-blue-400">Game</span>
             <span className="text-red-600 dark:text-red-400">play</span>
             {' '}
             <span className="text-green-600 dark:text-green-400">Labs</span>
           </span>
-          <AtomIcon className="h-6 w-6 md:h-7 md:w-7 ml-2" />
+          <AtomIcon className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7 ml-1.5 sm:ml-2 flex-shrink-0" />
         </Link>
 
-        <nav className="flex items-center gap-2 md:gap-1 overflow-x-auto md:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav className="flex items-center gap-2 md:gap-1 overflow-x-auto md:overflow-visible whitespace-nowrap scrollbar-hide flex-shrink-0">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative rounded-full px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
+                className={`relative px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
                   isActive
-                    ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-50 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                    ? "text-zinc-900 dark:text-zinc-50 underline decoration-2 underline-offset-4"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 }`}
               >
                 {item.label}
@@ -90,10 +90,10 @@ export default function NavBar() {
             <>
               <Link
                 href="/profile"
-                className={`ml-0 md:ml-2 rounded-full px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
+                className={`ml-0 md:ml-2 px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
                   pathname === "/profile"
-                    ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-50 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                    ? "text-zinc-900 dark:text-zinc-50 underline decoration-2 underline-offset-4"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 }`}
               >
                 Profile
@@ -101,7 +101,7 @@ export default function NavBar() {
               <button
                 onClick={handleLogout}
                 type="button"
-                className="ml-0 md:ml-2 rounded-full px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium text-zinc-600 transition-all duration-200 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50 min-w-[60px] md:min-w-0"
+                className="ml-0 md:ml-2 px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium text-zinc-600 transition-all duration-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 min-w-[60px] md:min-w-0"
               >
                 Logout
               </button>
@@ -110,20 +110,20 @@ export default function NavBar() {
             <div className="ml-0 md:ml-2 flex items-center gap-2 md:gap-2">
               <Link
                 href="/login"
-                className={`rounded-full px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
+                className={`px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
                   pathname === "/login"
-                    ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-50 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                    ? "text-zinc-900 dark:text-zinc-50 underline decoration-2 underline-offset-4"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 }`}
               >
                 Log In
               </Link>
               <Link
                 href="/signup"
-                className={`rounded-full px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
+                className={`px-4 py-2 md:px-4 md:py-1.5 text-sm font-medium transition-all duration-200 min-w-[60px] md:min-w-0 ${
                   pathname === "/signup"
-                    ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-50 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+                    ? "text-zinc-900 dark:text-zinc-50 underline decoration-2 underline-offset-4"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 }`}
               >
                 Sign Up

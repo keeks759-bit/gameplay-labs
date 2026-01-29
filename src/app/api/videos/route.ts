@@ -221,12 +221,7 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('[VIDEOS_POST] Insert error:', insertError);
       return NextResponse.json(
-        { 
-          ok: false, 
-          error: 'Failed to create video',
-          detail: insertError.message || 'Unknown database error',
-          ...(insertError.code && { code: insertError.code })
-        },
+        { ok: false, error: 'Failed to create video' },
         { status: 500 }
       );
     }
@@ -243,7 +238,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[VIDEOS_POST] Unexpected error:', error);
     return NextResponse.json(
-      { ok: false, error: 'Internal server error' },
+      { ok: false, error: 'Failed to create video' },
       { status: 500 }
     );
   }

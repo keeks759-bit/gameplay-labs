@@ -199,54 +199,59 @@ export default function UploadPage() {
     setTitleError(null);
 
     try {
-      // Sanitize filename: remove special characters, keep alphanumeric, dots, dashes, underscores
-      const sanitizedFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      
-      // Create storage path: ${user.id}/${Date.now()}-${sanitizedFilename}
-      const storagePath = `${user.id}/${Date.now()}-${sanitizedFilename}`;
+      // Step 1: Get Cloudflare Stream direct upload URL
+      const directUploadResponse = await fetch('/api/stream/direct-upload', {
+        method: 'POST',
+      });
 
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('videos')
-        .upload(storagePath, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw new Error(uploadError.message || 'Failed to upload file');
+      if (!directUploadResponse.ok) {
+        const errorData = await directUploadResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to get upload URL');
       }
 
-      // Get current authenticated user to ensure RLS passes
-      // WHY: RLS requires created_by = auth.uid(), so we must use the current session user
-      const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !currentUser) {
-        // If user session is invalid, clean up uploaded file and error
-        await supabase.storage.from('videos').remove([storagePath]);
-        throw new Error('Authentication expired. Please log in again.');
+      const { ok, uid, uploadURL } = await directUploadResponse.json();
+
+      if (!ok || !uid || !uploadURL) {
+        throw new Error('Invalid response from upload service');
       }
 
-      // Insert into database
-      // WHY: created_by must match auth.uid() for RLS to pass
-      // Store ONLY the storage path (not full URL) - URLs will be generated on display
-      const { error: insertError } = await supabase
-        .from('videos')
-        .insert({
+      // Step 2: Upload file directly to Cloudflare Stream
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const cloudflareUploadResponse = await fetch(uploadURL, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!cloudflareUploadResponse.ok) {
+        const errorText = await cloudflareUploadResponse.text().catch(() => 'Unknown error');
+        throw new Error(`Upload failed: ${errorText.slice(0, 100)}`);
+      }
+
+      // Step 3: Create video record in database
+      const createVideoResponse = await fetch('/api/videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           title: title.trim(),
+          category_id: categoryId,
           game_title: gameTitle.trim() || null,
-          created_by: currentUser.id, // Use current session user for RLS
-          video_url: storagePath, // Store storage path only (e.g., "userId/timestamp-filename.mov")
-          category_id: categoryId, // Selected category ID
-          playback_id: '', // Keep for backward compatibility, but not used for Storage
-          vote_count: 0, // Default
-          hidden: false, // Keep for backward compatibility
-        });
+          stream_uid: uid,
+        }),
+      });
 
-      if (insertError) {
-        // If insert fails, try to delete the uploaded file
-        await supabase.storage.from('videos').remove([storagePath]);
-        throw new Error(insertError.message || 'Failed to save video information');
+      if (!createVideoResponse.ok) {
+        const errorData = await createVideoResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save video information');
+      }
+
+      const { ok: videoOk } = await createVideoResponse.json();
+
+      if (!videoOk) {
+        throw new Error('Failed to save video information');
       }
 
       // Success - redirect to home

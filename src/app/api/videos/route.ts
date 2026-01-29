@@ -1,12 +1,15 @@
 /**
- * API Route: GET /api/videos
+ * API Route: GET /api/videos, POST /api/videos
  * 
- * WHY: Server-side data fetching for videos
+ * WHY: Server-side data fetching for videos (GET)
+ *      Server-side video creation with Cloudflare Stream support (POST)
  * Fetches videos with categories, sorted by vote_count and created_at
  * Only shows videos with status='active'
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/auth-helpers-nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { VideoWithCategory } from '@/types/database';
 
@@ -140,6 +143,107 @@ export async function GET(request: Request) {
     console.error('Unexpected error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    // Create Supabase client with cookie access for route handler
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Ignore errors in route handlers
+            }
+          },
+        },
+      }
+    );
+    
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { ok: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Parse request body
+    const body = await request.json();
+    const { title, category_id, game_title, stream_uid } = body;
+
+    // Validate required fields
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return NextResponse.json(
+        { ok: false, error: 'Missing or invalid title' },
+        { status: 400 }
+      );
+    }
+
+    if (!stream_uid || typeof stream_uid !== 'string' || !stream_uid.trim()) {
+      return NextResponse.json(
+        { ok: false, error: 'Missing stream_uid' },
+        { status: 400 }
+      );
+    }
+
+    // Insert video record with stream_uid
+    const { data: videoData, error: insertError } = await supabase
+      .from('videos')
+      .insert({
+        title: title.trim(),
+        game_title: game_title?.trim() || null,
+        category_id: category_id || null,
+        created_by: user.id,
+        stream_uid: stream_uid.trim(),
+        playback_id: null, // Stream videos don't use playback_id
+        vote_count: 0,
+        hidden: false,
+      })
+      .select('id, stream_uid, title, created_at')
+      .single();
+
+    if (insertError) {
+      console.error('[VIDEOS_POST] Insert error:', insertError);
+      return NextResponse.json(
+        { 
+          ok: false, 
+          error: 'Failed to create video',
+          detail: insertError.message || 'Unknown database error',
+          ...(insertError.code && { code: insertError.code })
+        },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      video: {
+        id: videoData.id,
+        stream_uid: videoData.stream_uid,
+        title: videoData.title,
+        created_at: videoData.created_at,
+      },
+    });
+  } catch (error) {
+    console.error('[VIDEOS_POST] Unexpected error:', error);
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

@@ -96,6 +96,23 @@ export default function ClipCard({ video }: ClipCardProps) {
     return data.publicUrl || null;
   }, [video.video_url]);
 
+  // Determine thumbnail URL with priority: stream_thumbnail_url > Cloudflare Stream derived > thumbnail_url
+  // WHY: Prefer Cloudflare Stream thumbnails when available for better quality/preview
+  const thumbnailUrl = useMemo(() => {
+    // Priority 1: Explicit stream thumbnail URL
+    if ((video as any).stream_thumbnail_url) {
+      return (video as any).stream_thumbnail_url;
+    }
+    
+    // Priority 2: Derive Cloudflare Stream thumbnail from stream_uid
+    if ((video as any).stream_uid) {
+      return `https://videodelivery.net/${(video as any).stream_uid}/thumbnails/thumbnail.jpg?time=1s`;
+    }
+    
+    // Priority 3: Fallback to existing thumbnail_url
+    return video.thumbnail_url || null;
+  }, [video]);
+
   // Handle report submission
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,18 +216,73 @@ export default function ClipCard({ video }: ClipCardProps) {
     }
   };
 
+  // Get stream_uid if present
+  const streamUid = (video as any).stream_uid;
+
   return (
     <div className="rounded-2xl border border-zinc-200/50 bg-white overflow-hidden shadow-sm transition-all hover:shadow-md dark:border-zinc-800/50 dark:bg-zinc-900">
       {/* Video or Thumbnail */}
       <div className="bg-zinc-100 dark:bg-zinc-800">
-        {video.video_url ? (
+        {streamUid ? (
+          // Cloudflare Stream iframe player
+          <div>
+            <div className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
+              {/* Thumbnail preview - shows before iframe loads and as background */}
+              {thumbnailUrl ? (
+                <img
+                  src={thumbnailUrl}
+                  alt={video.title}
+                  className="absolute inset-0 w-full h-full object-cover z-0"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+                  <div className="text-center">
+                    <svg
+                      className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-500">Tap to play</p>
+                  </div>
+                </div>
+              )}
+              {/* Cloudflare Stream iframe player */}
+              <iframe
+                src={`https://iframe.videodelivery.net/${streamUid}`}
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+                allowFullScreen
+                className="w-full h-full relative z-10"
+                style={{ border: 'none' }}
+              />
+            </div>
+            <div className="px-3 md:px-4 py-1.5 md:py-2">
+              <a
+                href={`https://iframe.videodelivery.net/${streamUid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              >
+                Open in player
+              </a>
+            </div>
+          </div>
+        ) : video.video_url ? (
           // Show video player if video_url exists (using public URL)
           <div>
             {publicVideoUrl ? (
               <>
                 <div className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
                   {/* Placeholder background - visible when no thumbnail */}
-                  {!video.thumbnail_url && (
+                  {!thumbnailUrl && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="text-center">
                         <svg
@@ -235,7 +307,7 @@ export default function ClipCard({ video }: ClipCardProps) {
                     controls
                     playsInline
                     preload="metadata"
-                    poster={video.thumbnail_url || undefined}
+                    poster={thumbnailUrl || undefined}
                     className="w-full h-full object-contain relative z-10"
                   >
                     Your browser does not support the video tag.
@@ -270,11 +342,11 @@ export default function ClipCard({ video }: ClipCardProps) {
               </div>
             )}
           </div>
-        ) : video.thumbnail_url ? (
+        ) : thumbnailUrl ? (
           // Fallback to thumbnail if no video_url
           <div className="aspect-video">
             <img
-              src={video.thumbnail_url}
+              src={thumbnailUrl}
               alt={video.title}
               className="w-full h-full object-cover"
             />

@@ -143,10 +143,10 @@ export default function UploadPage() {
       return;
     }
 
-    // Validate file size (50MB = 50 * 1024 * 1024 bytes)
-    const maxSize = 50 * 1024 * 1024;
+    // Validate file size (250MB = 250 * 1024 * 1024 bytes)
+    const maxSize = 250 * 1024 * 1024;
     if (selectedFile.size > maxSize) {
-      setError('File size must be less than 50MB');
+      setError('File size must be less than 250MB');
       setFile(null);
       return;
     }
@@ -399,7 +399,7 @@ export default function UploadPage() {
               className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600 file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-sm file:font-medium file:bg-zinc-100 file:text-zinc-900 hover:file:bg-zinc-200 dark:file:bg-zinc-700 dark:file:text-zinc-50"
             />
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Max 50MB
+              Max 250MB
             </p>
             {file && (
               <p className="text-sm text-zinc-600 dark:text-zinc-400">

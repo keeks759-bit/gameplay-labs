@@ -68,6 +68,9 @@ export default function UploadPage() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   
+  // Platform state
+  const [platform, setPlatform] = useState<string>('');
+  
   // Title profanity error state
   const [titleError, setTitleError] = useState<string | null>(null);
 
@@ -159,6 +162,11 @@ export default function UploadPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Prevent concurrent uploads
+    if (uploading) {
+      return;
+    }
+    
     if (!user) {
       setError('You must be logged in to upload');
       return;
@@ -193,27 +201,75 @@ export default function UploadPage() {
       return;
     }
 
+    // Set uploading state immediately to prevent duplicate submissions
     setUploading(true);
     setError(null);
     setCategoryError(null);
     setTitleError(null);
 
     try {
-      // Step 1: Get Cloudflare Stream direct upload URL
-      const directUploadResponse = await fetch('/api/stream/direct-upload', {
-        method: 'POST',
-      });
+      // Step 1: Get Cloudflare Stream direct upload URL with retry logic
+      const getDirectUploadUrl = async (attempt: number): Promise<{ uid: string; uploadURL: string }> => {
+        const delays = [300, 800, 1500];
+        const maxAttempts = 3;
+        
+        for (let i = 0; i < maxAttempts; i++) {
+          try {
+            const response = await fetch('/api/stream/direct-upload', {
+              method: 'POST',
+              cache: 'no-store',
+              credentials: 'same-origin',
+            });
 
-      if (!directUploadResponse.ok) {
-        const errorData = await directUploadResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to get upload URL');
-      }
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              const error = errorData.error || 'Failed to get upload URL';
+              
+              // Do NOT retry on 4xx (client errors) - throw immediately
+              if (response.status >= 400 && response.status < 500) {
+                throw new Error(error || 'Upload request failed. Please check your input and try again.');
+              }
+              
+              // Retry only on 5xx (server errors) or network failures
+              if (i < maxAttempts - 1 && response.status >= 500) {
+                await new Promise(resolve => setTimeout(resolve, delays[i]));
+                continue;
+              }
+              throw new Error(error);
+            }
 
-      const { ok, uid, uploadURL } = await directUploadResponse.json();
+            const data = await response.json().catch(() => null);
+            
+            if (!data || !data.ok || !data.uid || !data.uploadURL) {
+              // Invalid response - retry if we have attempts left
+              if (i < maxAttempts - 1) {
+                await new Promise(resolve => setTimeout(resolve, delays[i]));
+                continue;
+              }
+              throw new Error('Invalid response from upload service');
+            }
 
-      if (!ok || !uid || !uploadURL) {
-        throw new Error('Invalid response from upload service');
-      }
+            return { uid: data.uid, uploadURL: data.uploadURL };
+          } catch (err: any) {
+            // Network errors or fetch failures (no response) - retry
+            // Only retry if it's a network error, not a 4xx client error
+            const isNetworkError = !err.message || 
+                                   err.message.includes('fetch') || 
+                                   err.message.includes('network') ||
+                                   err.message.includes('Failed to fetch');
+            
+            if (i < maxAttempts - 1 && isNetworkError) {
+              await new Promise(resolve => setTimeout(resolve, delays[i]));
+              continue;
+            }
+            throw err;
+          }
+        }
+        
+        throw new Error('Upload connection failed');
+      };
+
+      const { uid, uploadURL } = await getDirectUploadUrl(0);
 
       // Step 2: Upload file directly to Cloudflare Stream
       const formData = new FormData();
@@ -240,6 +296,7 @@ export default function UploadPage() {
           category_id: categoryId,
           game_title: gameTitle.trim() || null,
           stream_uid: uid,
+          platform: platform.trim() || null,
         }),
       });
 
@@ -257,7 +314,12 @@ export default function UploadPage() {
       // Success - redirect to home
       router.push('/');
     } catch (err: any) {
-      setError(err.message || 'Upload failed. Please try again.');
+      // Show friendly error message for connection failures
+      if (err.message?.includes('connection failed') || err.message?.includes('Failed to fetch')) {
+        setError('Upload connection failed. Please try again.');
+      } else {
+        setError(err.message || 'Upload failed. Please try again.');
+      }
     } finally {
       setUploading(false);
     }
@@ -297,7 +359,7 @@ export default function UploadPage() {
         {uploading && (
           <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              Uploading your clip...
+              Uploading your clip... Please wait.
             </p>
           </div>
         )}
@@ -344,6 +406,28 @@ export default function UploadPage() {
               className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:border-zinc-700 focus:border-zinc-500 focus:ring-zinc-500 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
               placeholder="e.g. Call of Duty, Fortnite, FIFA"
             />
+          </div>
+
+          {/* Game System Dropdown */}
+          <div className="space-y-2">
+            <label htmlFor="platform" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Game System <span className="text-zinc-400 dark:text-zinc-500 text-xs">(optional)</span>
+            </label>
+            <select
+              id="platform"
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value)}
+              disabled={uploading}
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+            >
+              <option value="">Not selected</option>
+              <option value="pc">PC</option>
+              <option value="xbox">Xbox</option>
+              <option value="playstation">PlayStation</option>
+              <option value="switch">Switch</option>
+              <option value="mobile">Mobile</option>
+              <option value="other">Other</option>
+            </select>
           </div>
 
           {/* Category Dropdown */}

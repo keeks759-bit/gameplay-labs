@@ -185,7 +185,27 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { title, category_id, game_title, stream_uid } = body;
+    const { title, category_id, game_title, stream_uid, platform } = body;
+    
+    // Validate and normalize platform if provided (must be one of allowed values)
+    const allowedPlatforms = ['pc', 'xbox', 'playstation', 'switch', 'mobile', 'other'];
+    let normalizedPlatform: string | null = null;
+    if (platform !== null && platform !== undefined && platform !== '') {
+      if (typeof platform !== 'string') {
+        return NextResponse.json(
+          { ok: false, error: 'Invalid platform value' },
+          { status: 400 }
+        );
+      }
+      const trimmedPlatform = platform.trim().toLowerCase();
+      if (!allowedPlatforms.includes(trimmedPlatform)) {
+        return NextResponse.json(
+          { ok: false, error: 'Invalid platform value' },
+          { status: 400 }
+        );
+      }
+      normalizedPlatform = trimmedPlatform;
+    }
 
     // Validate required fields
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -212,6 +232,7 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
         stream_uid: stream_uid.trim(),
         playback_id: null, // Stream videos don't use playback_id
+        platform: normalizedPlatform,
         vote_count: 0,
         hidden: false,
       })

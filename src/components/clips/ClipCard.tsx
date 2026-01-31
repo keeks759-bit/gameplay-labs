@@ -10,7 +10,8 @@
 
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useVote } from '@/hooks/useVote';
 import { supabase } from '@/lib/supabaseClient';
 import { VideoWithCategory } from '@/types/database';
@@ -22,6 +23,8 @@ type ClipCardProps = {
 const ADMIN_UUID = 'e570e7ed-d901-4af3-b1a1-77e57772a51c';
 
 export default function ClipCard({ video }: ClipCardProps) {
+  const router = useRouter();
+  
   // Use voting hook - handles RPC call, vote checking, optimistic updates, and auth
   const { voteCount, hasVoted, isVoting, error, handleVote } = useVote(
     video.id,
@@ -96,8 +99,19 @@ export default function ClipCard({ video }: ClipCardProps) {
     return data.publicUrl || null;
   }, [video.video_url]);
 
+  // Get stream_uid if present
+  const streamUid = (video as any).stream_uid;
+  
+  // Stable base thumbnail URL for Stream videos (only depends on streamUid)
+  // WHY: Prevents effect thrash from changing dependencies
+  const baseThumbnailUrl = useMemo(() => {
+    if (!streamUid) return null;
+    return `https://videodelivery.net/${streamUid}/thumbnails/thumbnail.jpg?time=1s`;
+  }, [streamUid]);
+  
   // Determine thumbnail URL with priority: stream_thumbnail_url > Cloudflare Stream derived > thumbnail_url
   // WHY: Prefer Cloudflare Stream thumbnails when available for better quality/preview
+  // NOTE: For Stream videos, baseThumbnailUrl is used in loader; this is for non-Stream fallback
   const thumbnailUrl = useMemo(() => {
     // Priority 1: Explicit stream thumbnail URL
     if ((video as any).stream_thumbnail_url) {
@@ -105,13 +119,13 @@ export default function ClipCard({ video }: ClipCardProps) {
     }
     
     // Priority 2: Derive Cloudflare Stream thumbnail from stream_uid
-    if ((video as any).stream_uid) {
-      return `https://videodelivery.net/${(video as any).stream_uid}/thumbnails/thumbnail.jpg?time=1s`;
+    if (streamUid) {
+      return baseThumbnailUrl;
     }
     
     // Priority 3: Fallback to existing thumbnail_url
     return video.thumbnail_url || null;
-  }, [video]);
+  }, [video, streamUid, baseThumbnailUrl]);
 
   // Handle report submission
   const handleReportSubmit = async (e: React.FormEvent) => {
@@ -216,144 +230,369 @@ export default function ClipCard({ video }: ClipCardProps) {
     }
   };
 
-  // Get stream_uid if present
-  const streamUid = (video as any).stream_uid;
+  // Track thumbnail loading state for Stream videos (feed tile only shows thumbnail)
+  const [thumbnailLoading, setThumbnailLoading] = useState(true);
+  const [thumbnailError, setThumbnailError] = useState(false);
+  const [thumbnailObjectUrl, setThumbnailObjectUrl] = useState<string | null>(null);
+  
+  // Ref to track last streamUid to prevent clearing state when effect re-runs for same video
+  const lastStreamUidRef = useRef<string | null>(null);
+  
+  // Ref to track success per streamUid (prevents stale-closure issues)
+  const didSucceedRef = useRef<Record<string, boolean>>({});
+  
+  // Minimum bytes to consider a thumbnail "real" (not a Cloudflare placeholder)
+  // Cloudflare placeholder images are typically < 5KB, real thumbnails are usually > 10KB
+  const MIN_BYTES = 5000;
+  
+  // Minimum average luminance to consider a thumbnail "real" (not a black placeholder)
+  // Black placeholders have luminance < 20, real thumbnails are usually > 50
+  const MIN_LUMINANCE = 20;
+  
+  // Helper: Check if blob image is a black placeholder by sampling luminance
+  const checkImageLuminance = (blob: Blob): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(blob);
+      
+      img.onload = () => {
+        try {
+          // Create tiny canvas for sampling (32x18 maintains 16:9 aspect)
+          const canvas = document.createElement('canvas');
+          canvas.width = 32;
+          canvas.height = 18;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Canvas context not available'));
+            return;
+          }
+          
+          // Draw image to canvas (scaled down)
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          // Sample pixels and compute average luminance
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+          let totalLuminance = 0;
+          let pixelCount = 0;
+          
+          // Sample every 4th pixel for performance (RGBA = 4 bytes per pixel)
+          for (let i = 0; i < data.length; i += 16) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            // Luminance formula: 0.299*R + 0.587*G + 0.114*B
+            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            totalLuminance += luminance;
+            pixelCount++;
+          }
+          
+          const avgLuminance = totalLuminance / pixelCount;
+          
+          // Cleanup object URL
+          URL.revokeObjectURL(objectUrl);
+          
+          resolve(avgLuminance);
+        } catch (err) {
+          URL.revokeObjectURL(objectUrl);
+          reject(err);
+        }
+      };
+      
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Image load failed'));
+      };
+      
+      img.src = objectUrl;
+    });
+  };
+  
+  // Auto-recovery: Retry thumbnail loading for Stream videos, validating blob size and luminance
+  useEffect(() => {
+    if (!streamUid || !baseThumbnailUrl) {
+      setThumbnailLoading(false);
+      setThumbnailObjectUrl(null);
+      setThumbnailError(false);
+      lastStreamUidRef.current = null;
+      return;
+    }
+    
+    // Only reset/clear state when streamUid actually changes (not on effect re-runs for same video)
+    // This prevents flicker in dev strict mode, hydration, or other effect re-runs
+    if (lastStreamUidRef.current !== streamUid) {
+      lastStreamUidRef.current = streamUid;
+      // Clear success flag for new streamUid
+      didSucceedRef.current[streamUid] = false;
+      setThumbnailObjectUrl(null);
+      setThumbnailError(false);
+      setThumbnailLoading(true);
+    }
+    
+    // Early return: if thumbnail already succeeded for this streamUid, don't restart loading
+    // Uses ref to avoid stale-closure issues
+    if (didSucceedRef.current[streamUid] === true) {
+      return;
+    }
+    
+    const maxRetries = 15;
+    const retryDelay = 2000; // 2 seconds
+    let retries = 0;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let currentObjectUrl: string | null = null;
+    
+    const attemptLoad = async () => {
+      try {
+        // Cache-bust each attempt to avoid CDN caching placeholder
+        // Use baseThumbnailUrl (stable) instead of thumbnailUrl (may change)
+        const cacheBustUrl = `${baseThumbnailUrl}${baseThumbnailUrl.includes('?') ? '&' : '?'}cb=${Date.now()}`;
+        
+        // Fetch as blob to check size (placeholder images are small)
+        const response = await fetch(cacheBustUrl, { cache: 'no-store' });
+        
+        if (!response.ok) {
+          // HTTP error - retry
+          retries++;
+          if (retries < maxRetries) {
+            timeoutId = setTimeout(attemptLoad, retryDelay);
+          } else {
+            setThumbnailLoading(false);
+            setThumbnailError(true);
+          }
+          return;
+        }
+        
+        const blob = await response.blob();
+        const blobSize = blob.size;
+        
+        // First filter: size check
+        if (blobSize < MIN_BYTES) {
+          // Placeholder detected (too small) - retry
+          retries++;
+          if (retries < maxRetries) {
+            timeoutId = setTimeout(attemptLoad, retryDelay);
+          } else {
+            // Max retries reached, show placeholder
+            setThumbnailLoading(false);
+            setThumbnailError(true);
+          }
+          return;
+        }
+        
+        // Second filter: luminance check (detect black placeholders)
+        try {
+          const avgLuminance = await checkImageLuminance(blob);
+          
+          if (avgLuminance < MIN_LUMINANCE) {
+            // Black placeholder detected (too dark) - retry
+            retries++;
+            if (retries < maxRetries) {
+              timeoutId = setTimeout(attemptLoad, retryDelay);
+            } else {
+              // Max retries reached, show placeholder
+              setThumbnailLoading(false);
+              setThumbnailError(true);
+            }
+            return;
+          }
+          
+          // Real thumbnail detected (size >= MIN_BYTES AND luminance >= MIN_LUMINANCE)
+          // Revoke previous object URL if exists
+          if (currentObjectUrl) {
+            URL.revokeObjectURL(currentObjectUrl);
+          }
+          
+          // Create object URL for the validated blob
+          const objectUrl = URL.createObjectURL(blob);
+          currentObjectUrl = objectUrl;
+          
+          // Mark success for this streamUid (ref-based, no stale closure)
+          didSucceedRef.current[streamUid] = true;
+          
+          setThumbnailObjectUrl(objectUrl);
+          setThumbnailLoading(false);
+          setThumbnailError(false);
+        } catch (luminanceErr) {
+          // Luminance check failed - treat as placeholder and retry
+          retries++;
+          if (retries < maxRetries) {
+            timeoutId = setTimeout(attemptLoad, retryDelay);
+          } else {
+            setThumbnailLoading(false);
+            setThumbnailError(true);
+          }
+        }
+      } catch (err) {
+        // Network error or fetch failure - retry
+        retries++;
+        if (retries < maxRetries) {
+          timeoutId = setTimeout(attemptLoad, retryDelay);
+        } else {
+          setThumbnailLoading(false);
+          setThumbnailError(true);
+        }
+      }
+    };
+    
+    // Start first attempt
+    attemptLoad();
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      // Cleanup: revoke object URL on unmount or dependency change
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+    };
+  }, [streamUid, baseThumbnailUrl]);
+  
+  // Handle tile click - navigate to player page
+  const handleTileClick = () => {
+    router.push(`/clips/${video.id}`);
+  };
 
   return (
     <div className="rounded-2xl border border-zinc-200/50 bg-white overflow-hidden shadow-sm transition-all hover:shadow-md dark:border-zinc-800/50 dark:bg-zinc-900">
       {/* Video or Thumbnail */}
       <div className="bg-zinc-100 dark:bg-zinc-800">
         {streamUid ? (
-          // Cloudflare Stream iframe player
-          <div>
-            <div className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
-              {/* Thumbnail preview - shows before iframe loads and as background */}
-              {thumbnailUrl ? (
-                <img
-                  src={thumbnailUrl}
-                  alt={video.title}
-                  className="absolute inset-0 w-full h-full object-cover z-0"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-                  <div className="text-center">
-                    <svg
-                      className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-500">Tap to play</p>
-                  </div>
-                </div>
-              )}
-              {/* Cloudflare Stream iframe player */}
-              <iframe
-                src={`https://iframe.videodelivery.net/${streamUid}`}
-                allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-                allowFullScreen
-                className="w-full h-full relative z-10"
-                style={{ border: 'none' }}
+          // Cloudflare Stream: Feed tile shows thumbnail only (no iframe)
+          // ENFORCED: NEVER render raw thumbnailUrl for Stream videos - only use thumbnailObjectUrl
+          <div 
+            className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900 cursor-pointer group"
+            onClick={handleTileClick}
+          >
+            {/* Thumbnail image - ONLY render when thumbnailObjectUrl exists (validated blob) */}
+            {thumbnailObjectUrl && !thumbnailError && !thumbnailLoading ? (
+              <img
+                src={thumbnailObjectUrl}
+                alt={video.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
               />
-            </div>
-            <div className="px-3 md:px-4 py-1.5 md:py-2">
-              <a
-                href={`https://iframe.videodelivery.net/${streamUid}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-              >
-                Open in player
-              </a>
+            ) : (
+              // Processing placeholder - shown when thumbnailObjectUrl is not available
+              // (loading, error, or placeholder detected)
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  {thumbnailLoading ? (
+                    <>
+                      <div className="w-12 h-12 mx-auto mb-2 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-600 dark:border-t-zinc-400 rounded-full animate-spin" />
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">Loading…</p>
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">Processing…</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Play icon overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/40 backdrop-blur-[2px] rounded-full p-3 md:p-4 group-hover:bg-black/50 transition-colors">
+                <svg
+                  className="w-8 h-8 md:w-10 md:h-10 text-white drop-shadow-lg"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
             </div>
           </div>
         ) : video.video_url ? (
-          // Show video player if video_url exists (using public URL)
-          <div>
-            {publicVideoUrl ? (
-              <>
-                <div className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
-                  {/* Placeholder background - visible when no thumbnail */}
-                  {!thumbnailUrl && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="text-center">
-                        <svg
-                          className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-500">Tap to play</p>
-                      </div>
-                    </div>
-                  )}
-                  <video
-                    src={publicVideoUrl}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    poster={thumbnailUrl || undefined}
-                    className="w-full h-full object-contain relative z-10"
-                  >
-                    Your browser does not support the video tag.
-                  </video>
-                  {/* Play overlay - mobile only */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none md:hidden z-20">
-                    <div className="bg-black/20 backdrop-blur-[2px] rounded-full p-3">
-                      <svg
-                        className="w-8 h-8 text-white drop-shadow-lg"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-3 md:px-4 py-1.5 md:py-2">
-                  <a
-                    href={publicVideoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-                  >
-                    Open file
-                  </a>
-                </div>
-              </>
+          // Supabase Storage video: Feed tile shows thumbnail only (no video player)
+          <div 
+            className="aspect-video w-full overflow-hidden rounded-t-2xl relative bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900 cursor-pointer group"
+            onClick={handleTileClick}
+          >
+            {/* Thumbnail or placeholder */}
+            {thumbnailUrl ? (
+              <img
+                src={thumbnailUrl}
+                alt={video.title}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
             ) : (
-              <div className="aspect-video flex items-center justify-center bg-zinc-200 dark:bg-zinc-800">
-                <p className="text-sm text-red-500 dark:text-red-400">Failed to load video</p>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <svg
+                    className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">Tap to play</p>
+                </div>
               </div>
             )}
+            {/* Play icon overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/40 backdrop-blur-[2px] rounded-full p-3 md:p-4 group-hover:bg-black/50 transition-colors">
+                <svg
+                  className="w-8 h-8 md:w-10 md:h-10 text-white drop-shadow-lg"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
           </div>
         ) : thumbnailUrl ? (
           // Fallback to thumbnail if no video_url
-          <div className="aspect-video">
+          <div 
+            className="aspect-video relative cursor-pointer group overflow-hidden rounded-t-2xl"
+            onClick={handleTileClick}
+          >
             <img
               src={thumbnailUrl}
               alt={video.title}
               className="w-full h-full object-cover"
             />
+            {/* Play icon overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/40 backdrop-blur-[2px] rounded-full p-3 md:p-4 group-hover:bg-black/50 transition-colors">
+                <svg
+                  className="w-8 h-8 md:w-10 md:h-10 text-white drop-shadow-lg"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </div>
+            </div>
           </div>
         ) : (
           // Show neutral placeholder if no video_url or thumbnail
-          <div className="aspect-video flex items-center justify-center bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900">
+          <div 
+            className="aspect-video flex items-center justify-center bg-gradient-to-br from-zinc-200 to-zinc-300 dark:from-zinc-800 dark:to-zinc-900 cursor-pointer group"
+            onClick={handleTileClick}
+          >
             <div className="text-center">
               <svg
                 className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-2"
@@ -376,11 +615,24 @@ export default function ClipCard({ video }: ClipCardProps) {
 
       {/* Content */}
       <div className="p-3 md:p-5">
-        {video.game_title && video.game_title.trim() && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
-            {video.game_title}
-          </p>
-        )}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          {video.game_title && video.game_title.trim() && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-500">
+              {video.game_title}
+            </p>
+          )}
+          {(video as any).platform && (video as any).platform.trim() && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+              {(video as any).platform === 'pc' ? 'PC' :
+               (video as any).platform === 'xbox' ? 'Xbox' :
+               (video as any).platform === 'playstation' ? 'PlayStation' :
+               (video as any).platform === 'switch' ? 'Switch' :
+               (video as any).platform === 'mobile' ? 'Mobile' :
+               (video as any).platform === 'other' ? 'Other' :
+               (video as any).platform}
+            </span>
+          )}
+        </div>
         <div className="mb-3">
           <h3 className="font-semibold text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-2 leading-snug">
             {video.title}

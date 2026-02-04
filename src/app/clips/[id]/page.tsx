@@ -78,8 +78,7 @@ export default function ClipPlayerPage() {
           .from('videos')
           .select(`
             *,
-            categories:categories!category_id (*),
-            profiles:profiles!created_by(display_name)
+            categories:categories!category_id (*)
           `)
           .eq('id', videoId)
           .eq('hidden', false)
@@ -91,10 +90,23 @@ export default function ClipPlayerPage() {
           return;
         }
         
-        const displayName = (data as any).profiles?.display_name;
+        // Two-step fetch: Get profile separately to avoid FK requirement
+        let uploaderUsername: string | null = null;
+        if (data.created_by) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('display_name')
+            .eq('id', data.created_by)
+            .single();
+          
+          if (profileData?.display_name && profileData.display_name.trim()) {
+            uploaderUsername = profileData.display_name.trim();
+          }
+        }
+        
         const videoData = {
           ...data,
-          uploader_username: displayName && displayName.trim() ? displayName.trim() : null,
+          uploader_username: uploaderUsername,
         } as VideoWithCategory;
         setVideo(videoData);
         setAdminPlatform((data as any).platform || '');

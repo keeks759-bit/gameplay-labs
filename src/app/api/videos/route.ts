@@ -41,8 +41,7 @@ export async function GET(request: Request) {
       .from('videos')
       .select(`
         *,
-        categories:categories!category_id (*),
-        profiles:profiles!created_by(display_name)
+        categories:categories!category_id (*)
       `)
       .eq('hidden', false);
 
@@ -115,13 +114,32 @@ export async function GET(request: Request) {
       );
     }
 
+    // Two-step fetch: Get profiles separately to avoid FK requirement
+    const createdByIds = [...new Set((data || []).map((v: any) => v.created_by).filter((id: any) => id !== null && id !== undefined))];
+    const profileMap = new Map<string, string>();
+    
+    if (createdByIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', createdByIds);
+      
+      if (profilesData) {
+        profilesData.forEach((profile: any) => {
+          if (profile.display_name && profile.display_name.trim()) {
+            profileMap.set(profile.id, profile.display_name.trim());
+          }
+        });
+      }
+    }
+    
     // Transform data to match VideoWithCategory type
     const videos: VideoWithCategory[] = (data || []).map((video: any) => {
-      const displayName = video.profiles?.display_name;
+      const uploaderUsername = video.created_by ? profileMap.get(video.created_by) || null : null;
       return {
         ...video,
         categories: video.categories || null,
-        uploader_username: displayName && displayName.trim() ? displayName.trim() : null,
+        uploader_username: uploaderUsername,
       };
     });
 

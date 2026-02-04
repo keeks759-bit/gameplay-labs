@@ -78,7 +78,8 @@ export default function ClipPlayerPage() {
           .from('videos')
           .select(`
             *,
-            categories:video_categories_v1!category_id (*)
+            categories:categories!category_id (*),
+            profiles:profiles!created_by(display_name)
           `)
           .eq('id', videoId)
           .eq('hidden', false)
@@ -90,7 +91,12 @@ export default function ClipPlayerPage() {
           return;
         }
         
-        setVideo(data as VideoWithCategory);
+        const displayName = (data as any).profiles?.display_name;
+        const videoData = {
+          ...data,
+          uploader_username: displayName && displayName.trim() ? displayName.trim() : null,
+        } as VideoWithCategory;
+        setVideo(videoData);
         setAdminPlatform((data as any).platform || '');
         setLoading(false);
       } catch (err) {
@@ -353,6 +359,15 @@ export default function ClipPlayerPage() {
             <h1 className="text-xl md:text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">
               {video.title}
             </h1>
+            {(video as any).uploader_username ? (
+              <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
+                uploaded by {(video as any).uploader_username}
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
+                uploaded by anonymous
+              </p>
+            )}
             <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-500 mb-4">
               <span>{video.categories?.name || 'Uncategorized'}</span>
               <span>•</span>

@@ -637,6 +637,15 @@ export default function ClipCard({ video }: ClipCardProps) {
           <h3 className="font-semibold text-base md:text-lg text-zinc-900 dark:text-zinc-50 line-clamp-2 leading-snug">
             {video.title}
           </h3>
+          {(video as any).uploader_username ? (
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
+              uploaded by {(video as any).uploader_username}
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-1">
+              uploaded by anonymous
+            </p>
+          )}
         </div>
 
         {/* Error message */}

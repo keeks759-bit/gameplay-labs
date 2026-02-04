@@ -41,7 +41,8 @@ export async function GET(request: Request) {
       .from('videos')
       .select(`
         *,
-        categories:categories!category_id (*)
+        categories:categories!category_id (*),
+        profiles:profiles!created_by(display_name)
       `)
       .eq('hidden', false);
 
@@ -115,10 +116,14 @@ export async function GET(request: Request) {
     }
 
     // Transform data to match VideoWithCategory type
-    const videos: VideoWithCategory[] = (data || []).map((video: any) => ({
-      ...video,
-      categories: video.categories || null,
-    }));
+    const videos: VideoWithCategory[] = (data || []).map((video: any) => {
+      const displayName = video.profiles?.display_name;
+      return {
+        ...video,
+        categories: video.categories || null,
+        uploader_username: displayName && displayName.trim() ? displayName.trim() : null,
+      };
+    });
 
     // Calculate nextCursor from last video
     let nextCursor: { vote_count?: number; created_at: string; id: number } | null = null;

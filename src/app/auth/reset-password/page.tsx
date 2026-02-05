@@ -26,9 +26,92 @@ function ResetPasswordContent() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        // First, check if there's a code in the URL hash or query params that needs to be exchanged
+        // Supabase reset links may include tokens in hash fragments
+        const urlHash = window.location.hash;
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const accessToken = urlParams.get('access_token');
+        const refreshToken = urlParams.get('refresh_token');
+        const type = urlParams.get('type');
         
-        if (sessionError || !session) {
+        // If we have a code, exchange it for a session (client-side fallback)
+        if (code && type === 'recovery') {
+          try {
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (exchangeError) {
+              console.error('Code exchange error:', exchangeError);
+              setError('Invalid or expired reset link. Please request a new password reset.');
+              setCheckingSession(false);
+              // Clear code from URL
+              window.history.replaceState({}, '', window.location.pathname);
+              return;
+            }
+            // Clear code from URL after successful exchange
+            window.history.replaceState({}, '', window.location.pathname);
+          } catch (exchangeErr) {
+            console.error('Code exchange failed:', exchangeErr);
+            setError('Failed to verify reset link. Please try again.');
+            setCheckingSession(false);
+            return;
+          }
+        }
+        
+        // If we have tokens in hash fragment, parse and set session
+        if (urlHash && urlHash.includes('access_token')) {
+          try {
+            const hashParams = new URLSearchParams(urlHash.substring(1));
+            const hashAccessToken = hashParams.get('access_token');
+            const hashRefreshToken = hashParams.get('refresh_token');
+            const hashType = hashParams.get('type');
+            
+            if (hashType === 'recovery' && hashAccessToken && hashRefreshToken) {
+              const { error: setSessionError } = await supabase.auth.setSession({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+              });
+              
+              if (setSessionError) {
+                console.error('Set session error:', setSessionError);
+                setError('Invalid or expired reset link. Please request a new password reset.');
+                setCheckingSession(false);
+                // Clear hash from URL
+                window.history.replaceState({}, '', window.location.pathname);
+                return;
+              }
+              // Clear hash from URL after successful session set
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          } catch (hashErr) {
+            console.error('Hash token processing failed:', hashErr);
+          }
+        }
+        
+        // Retry getting session with small delays (cookies may need time to sync after redirect)
+        let retries = 0;
+        const maxRetries = 3;
+        let session = null;
+        
+        while (retries < maxRetries && !session) {
+          const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+          
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+          }
+          
+          if (currentSession) {
+            session = currentSession;
+            break;
+          }
+          
+          // Wait a bit before retrying (cookies may need time to sync)
+          if (retries < maxRetries - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          retries++;
+        }
+        
+        if (!session) {
           setError('Invalid or expired reset link. Please request a new password reset.');
           setCheckingSession(false);
           return;
@@ -38,6 +121,7 @@ function ResetPasswordContent() {
         // DO NOT redirect away - user needs to set new password here
         setCheckingSession(false);
       } catch (err) {
+        console.error('Session check error:', err);
         setError('Failed to verify reset link. Please try again.');
         setCheckingSession(false);
       }
@@ -86,6 +170,13 @@ function ResetPasswordContent() {
     }
 
     try {
+      // Verify session exists before updating password
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('Auth session missing! Please use the reset link from your email.');
+      }
+      
       const { error: updateError } = await supabase.auth.updateUser({
         password: password,
       });

@@ -500,6 +500,11 @@ export default function UploadPage() {
           >
             {uploading ? 'Uploading...' : 'Upload Clip'}
           </button>
+          
+          {/* Upload Disclaimer */}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-3 text-center">
+            Your clip is uploading! It can take up to a minute or two to finish processing before it shows up on the home feed.
+          </p>
         </form>
       </div>
     </div>

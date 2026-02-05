@@ -10,7 +10,6 @@ import AtomIcon from "./AtomIcon";
 const baseNavItems = [
   { href: "/", label: "Home" },
   { href: "/upload", label: "Upload" },
-  { href: "/top", label: "Top" },
 ];
 
 export default function NavBar() {

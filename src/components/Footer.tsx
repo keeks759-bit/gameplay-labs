@@ -10,12 +10,6 @@ export default function Footer() {
           </p>
           <nav className="flex items-center gap-4 sm:gap-6 flex-wrap justify-center">
             <Link
-              href="/about"
-              className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
-            >
-              About Us
-            </Link>
-            <Link
               href="/terms"
               className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
             >

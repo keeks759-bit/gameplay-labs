@@ -60,8 +60,7 @@ export default function NavBar() {
         ]
       : !loading
       ? [
-          { href: "/login", label: "Log In" },
-          { href: "/signup", label: "Sign Up" },
+          { href: "/login", label: "Login/Sign Up" },
         ]
       : []),
   ];
@@ -85,9 +84,9 @@ export default function NavBar() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Brand Lockup - Left Side */}
           <Link 
-            href="/about" 
+            href="/" 
             className="transition-opacity hover:opacity-80 cursor-pointer inline-flex items-center leading-none antialiased whitespace-nowrap"
-            aria-label="Gameplay Labs - Learn more about us"
+            aria-label="Gameplay Labs - Home"
           >
             <span className="text-lg sm:text-xl md:text-3xl font-bold leading-none">
               <span className="text-blue-600 dark:text-blue-400">Game</span>
@@ -129,10 +128,7 @@ export default function NavBar() {
             ) : !loading ? (
               <div className="ml-2 flex items-center gap-2">
                 <Link href="/login" className={getNavLinkClass("/login")}>
-                  Log In
-                </Link>
-                <Link href="/signup" className={getNavLinkClass("/signup")}>
-                  Sign Up
+                  Login/Sign Up
                 </Link>
               </div>
             ) : null}
@@ -179,6 +175,15 @@ export default function NavBar() {
                   {item.label}
                 </Link>
               ))}
+              {!loading && (
+                <Link
+                  href="/about"
+                  onClick={handleLinkClick}
+                  className={`block py-3 px-4 rounded-lg ${getNavLinkClass("/about")}`}
+                >
+                  About Us
+                </Link>
+              )}
               {!loading && isAuthenticated && (
                 <button
                   onClick={() => {

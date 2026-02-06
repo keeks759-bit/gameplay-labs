@@ -21,7 +21,7 @@ export default function HomePage() {
         <ClipGrid videos={[]} isLoading={true} />
       </div>
     }>
-      <VideoFeed defaultSort="newest" />
+      <VideoFeed defaultSort="votes" />
     </Suspense>
   );
 }

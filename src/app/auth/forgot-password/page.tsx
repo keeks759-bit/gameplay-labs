@@ -58,19 +58,45 @@ export default function ForgotPasswordPage() {
           errorMsg.includes('too many');
 
         if (isRateLimit) {
-          throw new Error('Too many emails sent recently. Please wait a bit and try again.');
+          setError('Too many emails sent recently. Please wait a bit and try again.');
+          setLoading(false);
+          isSubmittingRef.current = false;
+          return;
         }
-        throw resetError;
+        
+        // Show detailed error message including error text
+        const errorDetails = [];
+        if (resetError.message) {
+          errorDetails.push(resetError.message);
+        }
+        if (resetError.status) {
+          errorDetails.push(`Status: ${resetError.status}`);
+        }
+        if (resetError.code) {
+          errorDetails.push(`Code: ${resetError.code}`);
+        }
+        
+        const fullErrorMsg = errorDetails.length > 0 
+          ? errorDetails.join(' | ')
+          : 'Failed to send reset email. Please try again.';
+        
+        setError(fullErrorMsg);
+        setLoading(false);
+        isSubmittingRef.current = false;
+        return;
       }
 
-      // Show neutral success message (don't reveal if email exists)
-      setMessage('If an account with that email exists, we\'ve sent you a password reset link.');
+      // Show success message
+      setMessage('If an account exists for that email, you\'ll receive a reset email shortly.');
+      setError(null);
       setEmail('');
       
       // Start 60-second cooldown
       setCooldownSeconds(60);
     } catch (error: any) {
-      setError(error.message || 'An error occurred. Please try again.');
+      // Fallback error handling
+      const errorMsg = error?.message || 'An error occurred. Please try again.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
       isSubmittingRef.current = false;

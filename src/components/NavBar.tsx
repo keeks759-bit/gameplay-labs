@@ -98,7 +98,7 @@ export default function NavBar() {
           </Link>
 
           {/* Desktop Nav - Hidden on Mobile */}
-          <nav className="hidden md:flex items-center gap-1 whitespace-nowrap">
+          <nav className="hidden md:flex items-center gap-2 whitespace-nowrap">
             {baseNavItems.map((item) => (
               <Link
                 key={item.href}
@@ -113,24 +113,33 @@ export default function NavBar() {
               <>
                 <Link
                   href="/profile"
-                  className={`ml-2 ${getNavLinkClass("/profile")}`}
+                  className={getNavLinkClass("/profile")}
                 >
                   Profile
+                </Link>
+                <Link
+                  href="/about"
+                  className={getNavLinkClass("/about")}
+                >
+                  About Us
                 </Link>
                 <button
                   onClick={handleLogout}
                   type="button"
-                  className="ml-2 px-4 py-1.5 text-sm font-medium text-zinc-600 transition-all duration-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+                  className="px-4 py-1.5 text-sm font-medium text-zinc-600 transition-all duration-200 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
                 >
                   Logout
                 </button>
               </>
             ) : !loading ? (
-              <div className="ml-2 flex items-center gap-2">
+              <>
                 <Link href="/login" className={getNavLinkClass("/login")}>
                   Login/Sign Up
                 </Link>
-              </div>
+                <Link href="/about" className={getNavLinkClass("/about")}>
+                  About Us
+                </Link>
+              </>
             ) : null}
           </nav>
 

@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createBrowserSupabaseClient } from '@/lib/supabase/browser';
 import { getSiteUrl } from '@/lib/siteUrl';
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const isSubmittingRef = useRef(false);
   const supabase = createBrowserSupabaseClient();
@@ -87,8 +90,11 @@ export default function ForgotPasswordPage() {
       }
 
       // Show success message
-      setMessage('If an account exists for that email, you\'ll receive a reset email shortly.');
+      setMessage('Check your email for your reset code.');
       setError(null);
+      // Store email before clearing input
+      const submitted = email.trim();
+      setSubmittedEmail(submitted);
       setEmail('');
       
       // Start 60-second cooldown
@@ -110,26 +116,25 @@ export default function ForgotPasswordPage() {
           Reset Password
         </h1>
         <p className="text-base text-zinc-600 dark:text-zinc-400">
-          Enter your email address and we'll send you a link to reset your password.
+          Enter your email address and we'll send you a reset code.
         </p>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         {message && (
-          <div className="mb-6 space-y-3">
+          <div className="mb-6">
             <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
-              <p className="text-sm text-green-800 dark:text-green-200">{message}</p>
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
-              <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-2">
-                If the link doesn't work, use the reset code from the email.
-              </p>
-              <Link
-                href="/auth/reset-password"
-                className="inline-block rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+              <p className="text-sm text-green-800 dark:text-green-200 mb-4">{message}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const emailParam = submittedEmail ? `?email=${encodeURIComponent(submittedEmail)}` : '';
+                  router.push(`/auth/reset-password${emailParam}`);
+                }}
+                className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
               >
-                Enter reset code
-              </Link>
+                Continue to reset password
+              </button>
             </div>
           </div>
         )}
@@ -162,12 +167,13 @@ export default function ForgotPasswordPage() {
             disabled={loading || cooldownSeconds > 0}
             className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
           >
-            {loading 
-              ? 'Sending...' 
-              : cooldownSeconds > 0 
-                ? `Please wait ${cooldownSeconds}s before requesting another reset link`
-                : 'Send Reset Link'}
+            {loading ? 'Sending...' : 'Send Reset Code'}
           </button>
+          {cooldownSeconds > 0 && (
+            <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Please wait {cooldownSeconds}s before requesting another reset code
+            </p>
+          )}
         </form>
 
         <p className="mt-6 text-center text-sm text-zinc-600 dark:text-zinc-400">

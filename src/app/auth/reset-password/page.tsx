@@ -19,7 +19,7 @@ function ResetPasswordContent() {
   // Reset code flow state
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
-  const [useCodeFlow, setUseCodeFlow] = useState(false);
+  const [useCodeFlow, setUseCodeFlow] = useState(true); // Default to code flow
   const [validation, setValidation] = useState<ReturnType<typeof validatePassword>>({
     isValid: false,
     errors: [],
@@ -30,8 +30,14 @@ function ResetPasswordContent() {
   // IMPORTANT: This page MUST NOT redirect away - it's the destination for password reset
   useEffect(() => {
     const establishSession = async () => {
-      // Check URL params for expired/invalid link indicators (auto-switch to code flow)
+      // Prefill email from URL param if present
       const urlParams = new URLSearchParams(window.location.search);
+      const emailParam = urlParams.get('email');
+      if (emailParam) {
+        setResetEmail(emailParam);
+      }
+      
+      // Check URL params for expired/invalid link indicators (ensure code flow is active)
       const errorCode = urlParams.get('error_code');
       const error = urlParams.get('error');
       const errorDescription = urlParams.get('error_description');
@@ -42,10 +48,10 @@ function ResetPasswordContent() {
         (errorDescription && (errorDescription.toLowerCase().includes('expired') || errorDescription.toLowerCase().includes('invalid')));
       
       if (isLinkBurned) {
-        // Auto-switch to code flow, clear error params from URL
+        // Ensure code flow is active, clear error params from URL
         setHasSession(false);
         setUseCodeFlow(true);
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', window.location.pathname + (emailParam ? `?email=${encodeURIComponent(emailParam)}` : ''));
         setCheckingSession(false);
         return;
       }
@@ -150,14 +156,16 @@ function ResetPasswordContent() {
         }
         
         if (!session) {
-          // No session - allow code flow
+          // No session - use code flow (default)
           setHasSession(false);
+          setUseCodeFlow(true);
           setCheckingSession(false);
           return;
         }
 
-        // Session exists - show the reset form (link-based flow)
+        // Session exists - show the password-only form
         setHasSession(true);
+        setUseCodeFlow(false);
         setCheckingSession(false);
       } catch (err) {
         console.error('Session establishment error:', err);
@@ -330,20 +338,6 @@ function ResetPasswordContent() {
           </div>
         )}
 
-        {!hasSession && !useCodeFlow && (
-          <div className="mb-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-3">
-              No active reset session found. Use the reset code from your email instead.
-            </p>
-            <button
-              type="button"
-              onClick={() => setUseCodeFlow(true)}
-              className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
-            >
-              Use reset code
-            </button>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Reset code flow fields */}

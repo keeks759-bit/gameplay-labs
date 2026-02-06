@@ -23,70 +23,10 @@ function ResetPasswordContent() {
 
   // Check if user has a valid session from recovery link
   // IMPORTANT: This page MUST NOT redirect away - it's the destination for password reset
+  // Session should already be established by /auth/confirm route (token_hash flow)
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // First, check if there's a code in the URL hash or query params that needs to be exchanged
-        // Supabase reset links may include tokens in hash fragments
-        const urlHash = window.location.hash;
-        const urlParams = new URLSearchParams(window.location.search);
-        const code = urlParams.get('code');
-        const accessToken = urlParams.get('access_token');
-        const refreshToken = urlParams.get('refresh_token');
-        const type = urlParams.get('type');
-        
-        // If we have a code, exchange it for a session (client-side fallback)
-        if (code && type === 'recovery') {
-          try {
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-            if (exchangeError) {
-              console.error('Code exchange error:', exchangeError);
-              setError('Invalid or expired reset link. Please request a new password reset.');
-              setCheckingSession(false);
-              // Clear code from URL
-              window.history.replaceState({}, '', window.location.pathname);
-              return;
-            }
-            // Clear code from URL after successful exchange
-            window.history.replaceState({}, '', window.location.pathname);
-          } catch (exchangeErr) {
-            console.error('Code exchange failed:', exchangeErr);
-            setError('Failed to verify reset link. Please try again.');
-            setCheckingSession(false);
-            return;
-          }
-        }
-        
-        // If we have tokens in hash fragment, parse and set session
-        if (urlHash && urlHash.includes('access_token')) {
-          try {
-            const hashParams = new URLSearchParams(urlHash.substring(1));
-            const hashAccessToken = hashParams.get('access_token');
-            const hashRefreshToken = hashParams.get('refresh_token');
-            const hashType = hashParams.get('type');
-            
-            if (hashType === 'recovery' && hashAccessToken && hashRefreshToken) {
-              const { error: setSessionError } = await supabase.auth.setSession({
-                access_token: hashAccessToken,
-                refresh_token: hashRefreshToken,
-              });
-              
-              if (setSessionError) {
-                console.error('Set session error:', setSessionError);
-                setError('Invalid or expired reset link. Please request a new password reset.');
-                setCheckingSession(false);
-                // Clear hash from URL
-                window.history.replaceState({}, '', window.location.pathname);
-                return;
-              }
-              // Clear hash from URL after successful session set
-              window.history.replaceState({}, '', window.location.pathname);
-            }
-          } catch (hashErr) {
-            console.error('Hash token processing failed:', hashErr);
-          }
-        }
-        
         // Retry getting session with small delays (cookies may need time to sync after redirect)
         let retries = 0;
         const maxRetries = 3;

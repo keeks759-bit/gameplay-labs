@@ -122,7 +122,7 @@ export default function ForgotPasswordPage() {
             </div>
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
               <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-2">
-                If the link doesn't work, use the 6-digit reset code from the email on the reset page.
+                If the link doesn't work, use the reset code from the email.
               </p>
               <Link
                 href="/auth/reset-password"

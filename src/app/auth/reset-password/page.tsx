@@ -30,6 +30,26 @@ function ResetPasswordContent() {
   // IMPORTANT: This page MUST NOT redirect away - it's the destination for password reset
   useEffect(() => {
     const establishSession = async () => {
+      // Check URL params for expired/invalid link indicators (auto-switch to code flow)
+      const urlParams = new URLSearchParams(window.location.search);
+      const errorCode = urlParams.get('error_code');
+      const error = urlParams.get('error');
+      const errorDescription = urlParams.get('error_description');
+      
+      const isLinkBurned = 
+        errorCode === 'otp_expired' ||
+        error === 'access_denied' ||
+        (errorDescription && (errorDescription.toLowerCase().includes('expired') || errorDescription.toLowerCase().includes('invalid')));
+      
+      if (isLinkBurned) {
+        // Auto-switch to code flow, clear error params from URL
+        setHasSession(false);
+        setUseCodeFlow(true);
+        window.history.replaceState({}, '', window.location.pathname);
+        setCheckingSession(false);
+        return;
+      }
+      
       try {
         // Priority 1: HASH TOKEN FLOW
         const urlHash = window.location.hash;
@@ -165,8 +185,8 @@ function ResetPasswordContent() {
 
     // RESET CODE FLOW: email + code + password
     if (useCodeFlow) {
-      if (!resetEmail.trim() || !resetCode.trim() || resetCode.length !== 6) {
-        setError('Please enter your email and the 6-digit reset code.');
+      if (!resetEmail.trim() || !resetCode.trim()) {
+        setError('Please enter your email and the reset code.');
         setLoading(false);
         return;
       }
@@ -353,16 +373,15 @@ function ResetPasswordContent() {
                   type="text"
                   id="resetCode"
                   value={resetCode}
-                  onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) => setResetCode(e.target.value)}
                   required
                   disabled={loading}
-                  maxLength={6}
-                  pattern="[0-9]{6}"
+                  maxLength={256}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
-                  placeholder="000000"
+                  placeholder="Paste reset code from email"
                 />
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  6-digit code from your reset email
+                  Paste the reset code from your email.
                 </p>
               </div>
             </>
@@ -443,7 +462,12 @@ function ResetPasswordContent() {
 
           <button
             type="submit"
-            disabled={loading || !validation.isValid || password !== confirmPassword}
+            disabled={
+              loading || 
+              !validation.isValid || 
+              password !== confirmPassword ||
+              (useCodeFlow && (!resetEmail.trim() || !resetCode.trim()))
+            }
             className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
           >
             {loading ? 'Resetting...' : 'Reset Password'}

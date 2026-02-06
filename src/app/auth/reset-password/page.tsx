@@ -27,28 +27,14 @@ function ResetPasswordContent() {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // Retry getting session with small delays (cookies may need time to sync after redirect)
-        let retries = 0;
-        const maxRetries = 3;
-        let session = null;
+        // Simple session check - trust the session established by /auth/confirm
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        while (retries < maxRetries && !session) {
-          const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-          
-          if (sessionError) {
-            console.error('Session error:', sessionError);
-          }
-          
-          if (currentSession) {
-            session = currentSession;
-            break;
-          }
-          
-          // Wait a bit before retrying (cookies may need time to sync)
-          if (retries < maxRetries - 1) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          retries++;
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setError('Failed to verify reset link. Please request a new password reset.');
+          setCheckingSession(false);
+          return;
         }
         
         if (!session) {
@@ -57,8 +43,7 @@ function ResetPasswordContent() {
           return;
         }
 
-        // Session exists - this is correct for password reset flow
-        // DO NOT redirect away - user needs to set new password here
+        // Session exists - show the reset form
         setCheckingSession(false);
       } catch (err) {
         console.error('Session check error:', err);
@@ -69,18 +54,6 @@ function ResetPasswordContent() {
 
     checkSession();
   }, [supabase]);
-
-  // Check for error from callback route
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const errorParam = urlParams.get('error');
-    if (errorParam) {
-      setError(decodeURIComponent(errorParam));
-      setCheckingSession(false);
-      // Clear error from URL
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
 
   // Validate password as user types
   useEffect(() => {

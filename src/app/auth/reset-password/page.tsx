@@ -235,10 +235,10 @@ function ResetPasswordContent() {
 
         setSuccess(true);
         
-        // Auto-redirect to login after 3 seconds
+        // Auto-redirect to home after 1.5 seconds
         setTimeout(() => {
-          router.push('/login');
-        }, 3000);
+          router.push('/');
+        }, 1500);
       } catch (error: any) {
         setError(error.message || 'Failed to reset password. Please try again.');
         setLoading(false);
@@ -278,10 +278,10 @@ function ResetPasswordContent() {
 
       setSuccess(true);
       
-      // Auto-redirect to login after 3 seconds
+      // Auto-redirect to home after 1.5 seconds
       setTimeout(() => {
-        router.push('/login');
-      }, 3000);
+        router.push('/');
+      }, 1500);
     } catch (error: any) {
       setError(error.message || 'Failed to reset password. Please try again.');
     } finally {

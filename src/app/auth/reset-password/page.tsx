@@ -21,13 +21,100 @@ function ResetPasswordContent() {
     hints: [],
   });
 
-  // Check if user has a valid session from recovery link
+  // Establish session from recovery link (handles multiple formats)
   // IMPORTANT: This page MUST NOT redirect away - it's the destination for password reset
-  // Session should already be established by /auth/confirm route (token_hash flow)
   useEffect(() => {
-    const checkSession = async () => {
+    const establishSession = async () => {
       try {
-        // Simple session check - trust the session established by /auth/confirm
+        // Priority 1: HASH TOKEN FLOW
+        const urlHash = window.location.hash;
+        if (urlHash && urlHash.includes('access_token')) {
+          try {
+            const hashParams = new URLSearchParams(urlHash.substring(1));
+            const hashAccessToken = hashParams.get('access_token');
+            const hashRefreshToken = hashParams.get('refresh_token');
+            const hashType = hashParams.get('type');
+            
+            if (hashType === 'recovery' && hashAccessToken && hashRefreshToken) {
+              console.log('reset flow: hash');
+              const { error: setSessionError } = await supabase.auth.setSession({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+              });
+              
+              if (setSessionError) {
+                console.error('setSession error:', setSessionError);
+              } else {
+                // Clear hash from URL
+                window.history.replaceState({}, '', window.location.pathname + window.location.search);
+                // Check session after setting
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                  setCheckingSession(false);
+                  return;
+                }
+              }
+            }
+          } catch (hashErr) {
+            console.error('Hash token processing failed:', hashErr);
+          }
+        }
+        
+        // Priority 2: PKCE CODE FLOW
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const type = urlParams.get('type');
+        
+        if (code && type === 'recovery') {
+          try {
+            console.log('reset flow: code');
+            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (exchangeError) {
+              console.error('exchangeCodeForSession error:', exchangeError);
+            } else {
+              // Remove code/type from URL (keep pathname only)
+              window.history.replaceState({}, '', window.location.pathname);
+              // Check session after exchange
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                setCheckingSession(false);
+                return;
+              }
+            }
+          } catch (codeErr) {
+            console.error('Code exchange failed:', codeErr);
+          }
+        }
+        
+        // Priority 3: TOKEN_HASH FLOW (optional safety)
+        const tokenHash = urlParams.get('token_hash');
+        if (tokenHash && type === 'recovery') {
+          try {
+            console.log('reset flow: token_hash');
+            const { error: verifyError } = await supabase.auth.verifyOtp({
+              token_hash: tokenHash,
+              type: 'recovery',
+            });
+            
+            if (verifyError) {
+              console.error('verifyOtp error:', verifyError);
+            } else {
+              // Remove token_hash/type from URL
+              window.history.replaceState({}, '', window.location.pathname);
+              // Check session after verify
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                setCheckingSession(false);
+                return;
+              }
+            }
+          } catch (tokenErr) {
+            console.error('Token hash verification failed:', tokenErr);
+          }
+        }
+        
+        // Final session check (after all flows attempted)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -46,13 +133,13 @@ function ResetPasswordContent() {
         // Session exists - show the reset form
         setCheckingSession(false);
       } catch (err) {
-        console.error('Session check error:', err);
+        console.error('Session establishment error:', err);
         setError('Failed to verify reset link. Please try again.');
         setCheckingSession(false);
       }
     };
 
-    checkSession();
+    establishSession();
   }, [supabase]);
 
   // Validate password as user types
@@ -87,7 +174,9 @@ function ResetPasswordContent() {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
-        throw new Error('Auth session missing! Please use the reset link from your email.');
+        setError('Auth session missing! Please request a new password reset.');
+        setLoading(false);
+        return;
       }
       
       const { error: updateError } = await supabase.auth.updateUser({

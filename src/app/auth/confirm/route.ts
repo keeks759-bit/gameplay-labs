@@ -4,10 +4,10 @@
  * Handles token_hash verification for password recovery (cross-device safe)
  * Supabase email links: {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next={{ .RedirectTo }}
  */
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const tokenHash = requestUrl.searchParams.get('token_hash');
   const type = requestUrl.searchParams.get('type');
@@ -27,8 +27,35 @@ export async function GET(request: Request) {
     return NextResponse.redirect(forgotUrl);
   }
 
+  // Create response object that will capture cookies
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
   try {
-    const supabase = await createServerSupabaseClient();
+    // Create Supabase client with cookie-aware response handling
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
+            cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+            response = NextResponse.next({
+              request,
+            });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              response.cookies.set(name, value, options)
+            );
+          },
+        },
+      }
+    );
     
     // Verify token_hash and establish session
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -43,9 +70,32 @@ export async function GET(request: Request) {
       return NextResponse.redirect(forgotUrl);
     }
 
+    // Post-verify sanity check: confirm session exists
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      console.error('Session check failed after verifyOtp:', sessionError);
+      const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
+      forgotUrl.searchParams.set('error', encodeURIComponent('Failed to establish session. Please request a new password reset.'));
+      return NextResponse.redirect(forgotUrl);
+    }
+
     // Success: redirect to next URL or default to reset-password
+    // Use the response object that has cookies set
     const redirectUrl = next || '/auth/reset-password';
-    return NextResponse.redirect(new URL(redirectUrl, requestUrl.origin));
+    const redirectResponse = NextResponse.redirect(new URL(redirectUrl, requestUrl.origin));
+    
+    // Copy cookies from the verifyOtp response to the redirect response
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+      });
+    });
+    
+    return redirectResponse;
   } catch (err) {
     console.error('Unexpected error in auth confirm:', err);
     const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);

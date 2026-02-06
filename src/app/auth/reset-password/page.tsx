@@ -15,6 +15,11 @@ function ResetPasswordContent() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
+  // Reset code flow state
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [useCodeFlow, setUseCodeFlow] = useState(false);
   const [validation, setValidation] = useState<ReturnType<typeof validatePassword>>({
     isValid: false,
     errors: [],
@@ -125,12 +130,14 @@ function ResetPasswordContent() {
         }
         
         if (!session) {
-          setError('Invalid or expired reset link. Please request a new password reset.');
+          // No session - allow code flow
+          setHasSession(false);
           setCheckingSession(false);
           return;
         }
 
-        // Session exists - show the reset form
+        // Session exists - show the reset form (link-based flow)
+        setHasSession(true);
         setCheckingSession(false);
       } catch (err) {
         console.error('Session establishment error:', err);
@@ -156,6 +163,62 @@ function ResetPasswordContent() {
     setLoading(true);
     setError(null);
 
+    // RESET CODE FLOW: email + code + password
+    if (useCodeFlow) {
+      if (!resetEmail.trim() || !resetCode.trim() || resetCode.length !== 6) {
+        setError('Please enter your email and the 6-digit reset code.');
+        setLoading(false);
+        return;
+      }
+
+      // Client-side password validation
+      if (!validation.isValid) {
+        setError('Please fix the password requirements above.');
+        setLoading(false);
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Verify OTP with email + code
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          email: resetEmail.trim(),
+          token: resetCode.trim(),
+          type: 'recovery',
+        });
+
+        if (verifyError) {
+          setError('Code invalid or expired. Request a new code.');
+          setLoading(false);
+          return;
+        }
+
+        // Immediately update password after successful OTP verification
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: password,
+        });
+
+        if (updateError) throw updateError;
+
+        setSuccess(true);
+        
+        // Auto-redirect to login after 3 seconds
+        setTimeout(() => {
+          router.push('/login');
+        }, 3000);
+      } catch (error: any) {
+        setError(error.message || 'Failed to reset password. Please try again.');
+        setLoading(false);
+      }
+      return;
+    }
+
+    // LINK-BASED FLOW: session already exists
     // Client-side validation
     if (!validation.isValid) {
       setError('Please fix the password requirements above.');
@@ -236,7 +299,7 @@ function ResetPasswordContent() {
           Set New Password
         </h1>
         <p className="text-base text-zinc-600 dark:text-zinc-400">
-          Enter your new password below.
+          {hasSession ? 'Enter your new password below.' : 'Enter your email, reset code, and new password below.'}
         </p>
       </div>
 
@@ -247,7 +310,63 @@ function ResetPasswordContent() {
           </div>
         )}
 
+        {!hasSession && !useCodeFlow && (
+          <div className="mb-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-3">
+              No active reset session found. Use the reset code from your email instead.
+            </p>
+            <button
+              type="button"
+              onClick={() => setUseCodeFlow(true)}
+              className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+            >
+              Use reset code
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Reset code flow fields */}
+          {useCodeFlow && (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="resetEmail" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  id="resetEmail"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="resetCode" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                  Reset Code
+                </label>
+                <input
+                  type="text"
+                  id="resetCode"
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  disabled={loading}
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+                  placeholder="000000"
+                />
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  6-digit code from your reset email
+                </p>
+              </div>
+            </>
+          )}
           <div className="space-y-2">
             <label htmlFor="password" className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
               New Password

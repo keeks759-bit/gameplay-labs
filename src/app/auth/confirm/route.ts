@@ -16,14 +16,14 @@ export async function GET(request: NextRequest) {
   // Validate required params
   if (!tokenHash || !type) {
     const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
-    forgotUrl.searchParams.set('error', encodeURIComponent('Invalid reset link. Please request a new password reset.'));
+    forgotUrl.searchParams.set('error', 'Invalid reset link. Please request a new password reset.');
     return NextResponse.redirect(forgotUrl);
   }
 
   // Only handle recovery type for password reset
   if (type !== 'recovery') {
     const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
-    forgotUrl.searchParams.set('error', encodeURIComponent('Invalid reset link type.'));
+    forgotUrl.searchParams.set('error', 'Invalid reset link type.');
     return NextResponse.redirect(forgotUrl);
   }
 
@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
       headers: request.headers,
     },
   });
+
+  // Store cookie options to preserve them exactly
+  const cookieOptionsMap = new Map<string, Record<string, unknown>>();
 
   try {
     // Create Supabase client with cookie-aware response handling
@@ -45,12 +48,19 @@ export async function GET(request: NextRequest) {
             return request.cookies.getAll();
           },
           setAll(cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) {
-            cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+            // Store original options for each cookie
+            cookiesToSet.forEach(({ name, value, options }) => {
+              if (options) {
+                cookieOptionsMap.set(name, options);
+              }
+            });
+            
+            // Create new response and set cookies with original options
             response = NextResponse.next({
               request,
             });
             cookiesToSet.forEach(({ name, value, options }) =>
-              response.cookies.set(name, value, options)
+              response.cookies.set(name, value, options || {})
             );
           },
         },
@@ -66,7 +76,10 @@ export async function GET(request: NextRequest) {
     if (verifyError) {
       console.error('Token hash verification error:', verifyError);
       const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
-      forgotUrl.searchParams.set('error', encodeURIComponent('Invalid or expired reset link. Please request a new password reset.'));
+      const errorMsg = verifyError.message 
+        ? `Invalid or expired reset link: ${verifyError.message}. Please request a new password reset.`
+        : 'Invalid or expired reset link. Please request a new password reset.';
+      forgotUrl.searchParams.set('error', errorMsg);
       return NextResponse.redirect(forgotUrl);
     }
 
@@ -76,30 +89,26 @@ export async function GET(request: NextRequest) {
     if (sessionError || !session) {
       console.error('Session check failed after verifyOtp:', sessionError);
       const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
-      forgotUrl.searchParams.set('error', encodeURIComponent('Failed to establish session. Please request a new password reset.'));
+      forgotUrl.searchParams.set('error', 'Failed to establish session. Please request a new password reset.');
       return NextResponse.redirect(forgotUrl);
     }
 
     // Success: redirect to next URL or default to reset-password
-    // Use the response object that has cookies set
+    // Create redirect response and copy cookies with their original options
     const redirectUrl = next || '/auth/reset-password';
     const redirectResponse = NextResponse.redirect(new URL(redirectUrl, requestUrl.origin));
     
-    // Copy cookies from the verifyOtp response to the redirect response
+    // Copy cookies from the verifyOtp response to the redirect response with original options
     response.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-      });
+      const originalOptions = cookieOptionsMap.get(cookie.name) || {};
+      redirectResponse.cookies.set(cookie.name, cookie.value, originalOptions);
     });
     
     return redirectResponse;
   } catch (err) {
     console.error('Unexpected error in auth confirm:', err);
     const forgotUrl = new URL('/auth/forgot-password', requestUrl.origin);
-    forgotUrl.searchParams.set('error', encodeURIComponent('An unexpected error occurred. Please try again.'));
+    forgotUrl.searchParams.set('error', 'An unexpected error occurred. Please try again.');
     return NextResponse.redirect(forgotUrl);
   }
 }

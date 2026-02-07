@@ -186,7 +186,9 @@ export default function VideoFeed({ defaultSort }: VideoFeedProps) {
             Create a free profile to share your best gameplay moments, watch what others are pulling off, and vote on the clips that stand out.
           </h1>
           <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-400 max-w-2xl">
-            <span className="text-blue-600 dark:text-blue-400">Discover the top play moments, ranked by the community.</span>
+            <span className="text-blue-600 dark:text-blue-400">Discover the top </span>
+            <span className="text-red-600 dark:text-red-400">play moments, </span>
+            <span className="text-green-600 dark:text-green-400">ranked by the community.</span>
           </p>
         </div>
       </div>

@@ -10,8 +10,8 @@ export default function AboutPage() {
         <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-center mb-12 sm:mb-16">
           <span className="text-blue-600 dark:text-blue-400">Share.</span>{' '}
           <span className="text-red-600 dark:text-red-400">Watch.</span>{' '}
-          <span className="text-green-600 dark:text-green-400">Vote.</span>{' '}
-          <AtomIcon className="inline-block align-middle h-10 w-10 sm:h-12 sm:w-12 lg:h-14 lg:w-14" />
+          <span className="text-green-600 dark:text-green-400">Vote.</span>{"\u00A0"}
+          <AtomIcon className="inline-block align-middle h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12" />
         </h1>
 
         {/* Content Paragraphs */}

@@ -88,13 +88,13 @@ export default function NavBar() {
             className="transition-opacity hover:opacity-80 cursor-pointer inline-flex items-center leading-none antialiased whitespace-nowrap"
             aria-label="Gameplay Labs - Home"
           >
-            <span className="text-lg sm:text-xl md:text-3xl font-bold leading-none">
+            <span className="text-xl sm:text-2xl md:text-4xl font-bold leading-none">
               <span className="text-blue-600 dark:text-blue-400">Game</span>
               <span className="text-red-600 dark:text-red-400">play</span>
               {' '}
               <span className="text-green-600 dark:text-green-400">Labs</span>
             </span>
-            <AtomIcon className="h-5 w-5 sm:h-5 sm:w-5 md:h-7 md:w-7 ml-1.5 sm:ml-2 flex-shrink-0" />
+            <AtomIcon className="h-6 w-6 sm:h-6 sm:w-6 md:h-8 md:w-8 ml-1.5 sm:ml-2 flex-shrink-0" />
           </Link>
 
           {/* Desktop Nav - Hidden on Mobile */}

@@ -40,6 +40,18 @@ export async function GET(request: Request) {
 
   // Handle code exchange
   if (code) {
+    // For recovery flows, skip server-side exchange (PKCE verifier is in client storage)
+    // Redirect to reset-password with query params preserved so client can exchange
+    if (isRecoveryFlow) {
+      const resetUrl = new URL('/auth/reset-password', requestUrl.origin);
+      // Preserve all query params (code, type, recovery) for client-side exchange
+      requestUrl.searchParams.forEach((value, key) => {
+        resetUrl.searchParams.set(key, value);
+      });
+      return NextResponse.redirect(resetUrl);
+    }
+    
+    // For non-recovery flows, exchange code on server (email confirmation, etc.)
     try {
       const supabase = await createServerSupabaseClient();
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -47,22 +59,9 @@ export async function GET(request: Request) {
       if (exchangeError) {
         console.error('Code exchange error:', exchangeError);
         
-        // If recovery flow, redirect to reset-password with error
-        if (isRecoveryFlow) {
-          const resetUrl = new URL('/auth/reset-password', requestUrl.origin);
-          resetUrl.searchParams.set('error', encodeURIComponent(exchangeError.message || 'Failed to verify reset link'));
-          return NextResponse.redirect(resetUrl);
-        }
-        
         const loginUrl = new URL('/login', requestUrl.origin);
         loginUrl.searchParams.set('error', encodeURIComponent(exchangeError.message || 'Failed to verify email'));
         return NextResponse.redirect(loginUrl);
-      }
-      
-      // If this is a password recovery flow, redirect to reset-password page
-      // We check both type=recovery (from Supabase) and recovery=true (our custom param)
-      if (isRecoveryFlow) {
-        return NextResponse.redirect(new URL('/auth/reset-password', requestUrl.origin));
       }
       
       // Check if profile exists (only for non-recovery flows)
@@ -92,13 +91,6 @@ export async function GET(request: Request) {
       }
     } catch (err) {
       console.error('Unexpected error in auth callback:', err);
-      
-      // If recovery flow, redirect to reset-password with error
-      if (isRecoveryFlow) {
-        const resetUrl = new URL('/auth/reset-password', requestUrl.origin);
-        resetUrl.searchParams.set('error', encodeURIComponent('An unexpected error occurred'));
-        return NextResponse.redirect(resetUrl);
-      }
       
       const loginUrl = new URL('/login', requestUrl.origin);
       loginUrl.searchParams.set('error', encodeURIComponent('An unexpected error occurred'));

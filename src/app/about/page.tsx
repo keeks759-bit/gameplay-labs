@@ -13,12 +13,16 @@ export default function AboutPage() {
 
         {/* Content Paragraph */}
         <p className="text-lg sm:text-xl text-zinc-700 dark:text-zinc-300 leading-relaxed text-center max-w-2xl mx-auto">
-          Gameplay Labs was built for those moments every gamer knows — the insane kill streak, the perfectly timed play, the FIFA goal you still think about, and that wild GTA sequence you wish you could rewatch. After one too many clips worth saving and no great place to revisit or share them, our founder wanted something better. A place to upload your proudest gaming moments, watch what other players are pulling off, and let the community of users vote on which clips truly deserve the spotlight.
+          Gameplay Labs was built for those moments every gamer knows. The clutch play that turns a match, the sequence you didn't think was possible, the highlight you keep replaying in your head.
+
+After saving clip after clip with no great place to revisit or share them, we wanted something better. A home for gameplay moments that deserve to be seen again, whether it's a cracked FPS run, a last-second game-winner, or a perfectly executed open-world sequence.
+
+Gameplay Labs is a community-driven platform where players upload their best moments, discover what others are pulling off, and vote on the clips that truly stand out. No algorithms. No gimmicks. Just great gameplay, surfaced by the people who appreciate it most: other gamers.
         </p>
 
         {/* Build Status Paragraph */}
         <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed text-center max-w-2xl mx-auto mt-8">
-          Gameplay Labs is currently in active build. We're focused on getting the fundamentals right and continuing to improve the experience based on real community use. If you notice something that could be better or have ideas to share, you can reach us directly at <a href="mailto:support@gameplaylabs.io" className="text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">support@gameplaylabs.io</a> — we read everything as we keep building.
+          Gameplay Labs is currently in active build. We're focused on getting the fundamentals right and continuing to improve the experience based on real community use. If you notice something that could be better or have ideas to share, you can reach us directly at <a href="mailto:support@gameplaylabs.io" className="text-zinc-900 dark:text-zinc-100 underline hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">support@gameplaylabs.io</a>. We read everything as we keep building.
         </p>
       </div>
     </div>

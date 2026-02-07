@@ -57,7 +57,7 @@ export default function ProfilePage() {
       setLoading(true);
       setError(null);
       
-      const { data, error: profileError } = await supabase
+      let { data, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
@@ -65,8 +65,23 @@ export default function ProfilePage() {
 
       if (profileError) {
         if (profileError.code === 'PGRST116') {
-          // No rows - profile doesn't exist, that's fine
-          setProfileExists(false);
+          // No rows - profile doesn't exist, auto-create it
+          await ensureProfileExists(userId);
+          // Retry fetch after creation
+          const retryResult = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          
+          if (retryResult.error || !retryResult.data) {
+            setError('Failed to create profile. Please try again.');
+            setLoading(false);
+            return;
+          }
+          
+          // Profile now exists - use retry data
+          data = retryResult.data;
         } else {
           // Real error
           setError(profileError.message || 'Failed to load profile. The profiles table may be missing or RLS is blocking access.');
@@ -74,9 +89,28 @@ export default function ProfilePage() {
           return;
         }
       }
-
+      
+      if (!data) {
+        // No profile found - auto-create it
+        await ensureProfileExists(userId);
+        // Retry fetch after creation
+        const retryResult = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        if (retryResult.error || !retryResult.data) {
+          setError('Failed to create profile. Please try again.');
+          setLoading(false);
+          return;
+        }
+        
+        data = retryResult.data;
+      }
+      
+      // Profile exists - populate form
       if (data) {
-        // Profile exists - populate form
         setProfileExists(true);
         setDisplayName(data.display_name || '');
         setPlatforms(data.platforms || []);
@@ -84,14 +118,43 @@ export default function ProfilePage() {
         setPrimaryGames(data.primary_games || '');
         setRegion(data.region || '');
         setPlaystyle(data.playstyle || '');
-      } else {
-        // No profile - form will be empty (ready for creation)
-        setProfileExists(false);
       }
     } catch (error: any) {
       setError(error.message || 'Failed to load profile. The profiles table may be missing or RLS is blocking access.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Ensure profile exists, creating it if missing
+  const ensureProfileExists = async (userId: string) => {
+    try {
+      // Create profile with unique temporary display_name (required by schema: NOT NULL UNIQUE)
+      // User will update this immediately via the form
+      const tempDisplayName = `user_${userId.substring(0, 8)}`;
+      
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          display_name: tempDisplayName,
+          platforms: [],
+          favorite_genres: [],
+          primary_games: null,
+          region: null,
+          playstyle: null,
+        });
+
+      // If duplicate/conflict error, treat as success (race condition handled)
+      if (insertError && insertError.code !== '23505') {
+        // 23505 is unique violation - means profile was created by another request
+        throw insertError;
+      }
+    } catch (error: any) {
+      // If it's a unique violation, that's fine - profile exists now
+      if (error.code !== '23505') {
+        throw error;
+      }
     }
   };
 

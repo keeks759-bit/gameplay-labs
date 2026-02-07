@@ -7,13 +7,11 @@ export default function AboutPage() {
     <div className="min-h-[60vh] flex items-center justify-center">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
         {/* Main Heading */}
-        <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-center mb-12 sm:mb-16">
-          <span className="text-blue-600 dark:text-blue-400">Share.</span>{' '}
-          <span className="text-red-600 dark:text-red-400">Watch.</span>{' '}
-          <span className="whitespace-nowrap inline-flex items-center gap-2">
-            <span className="text-green-600 dark:text-green-400">Vote.</span>
-            <AtomIcon className="inline-block align-middle h-7 w-7 sm:h-9 sm:w-9 lg:h-10 lg:w-10" />
-          </span>
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-center mb-12 sm:mb-16 inline-flex items-center justify-center whitespace-nowrap gap-3">
+          <span className="text-blue-600 dark:text-blue-400">Share.</span>
+          <span className="text-red-600 dark:text-red-400">Watch.</span>
+          <span className="text-green-600 dark:text-green-400">Vote.</span>
+          <AtomIcon className="inline-block align-middle h-9 w-9 sm:h-12 sm:w-12 lg:h-14 lg:w-14" />
         </h1>
 
         {/* Content Paragraphs */}

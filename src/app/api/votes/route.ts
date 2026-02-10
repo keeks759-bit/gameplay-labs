@@ -9,6 +9,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/auth-helpers-nextjs';
 
+// In-memory rate limiter (best-effort, serverless-friendly)
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(key: string, limit: number, windowMs: number): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + windowMs,
+    });
+    return { ok: true };
+  }
+
+  entry.count += 1;
+
+  if (entry.count > limit) {
+    const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
+    return { ok: false, retryAfterSec };
+  }
+
+  return { ok: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Create Supabase client with cookie access for route handler
@@ -44,6 +74,31 @@ export async function POST(request: NextRequest) {
           status: 401,
           headers: {
             'Cache-Control': 'no-store',
+          },
+        }
+      );
+    }
+
+    // Rate limiting (after auth check, before RPC call)
+    // Key: authenticated user ID only
+    const rateLimitKey = `user:${user.id}`;
+    
+    // Check rate limit: 30 requests per 60 seconds
+    const rateLimitResult = checkRateLimit(rateLimitKey, 30, 60 * 1000);
+    
+    if (!rateLimitResult.ok) {
+      console.warn('[VOTES_POST] Rate limit exceeded:', {
+        userId: user.id,
+        path: request.nextUrl.pathname,
+        retryAfterSec: rateLimitResult.retryAfterSec,
+      });
+      return NextResponse.json(
+        { error: 'Too many requests' },
+        {
+          status: 429,
+          headers: {
+            'Cache-Control': 'no-store',
+            'Retry-After': rateLimitResult.retryAfterSec.toString(),
           },
         }
       );

@@ -12,6 +12,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/auth-helpers-nextjs';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { VideoWithCategory } from '@/types/database';
+import { isAdminUserId } from '@/lib/security/admin';
 
 export async function GET(request: Request) {
   try {
@@ -105,12 +106,22 @@ export async function GET(request: Request) {
               code: error.code,
             },
           },
-          { status: 500 }
+          { 
+            status: 500,
+            headers: {
+              'Cache-Control': 'no-store',
+            },
+          }
         );
       }
       return NextResponse.json(
         { error: 'Failed to fetch videos' },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        }
       );
     }
 
@@ -166,7 +177,12 @@ export async function GET(request: Request) {
     console.error('Unexpected error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
     );
   }
 }
@@ -245,6 +261,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check daily upload cap (non-admin users only)
+    if (!isAdminUserId(user.id)) {
+      // Get start of current UTC day
+      const now = new Date();
+      const utcStartOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      
+      // Count videos created by this user today (UTC)
+      const { count, error: countError } = await supabase
+        .from('videos')
+        .select('id', { count: 'exact', head: true })
+        .eq('created_by', user.id)
+        .gte('created_at', utcStartOfDay.toISOString());
+
+      if (countError) {
+        console.error('[VIDEOS_POST] Failed to check daily upload count:', {
+          error: countError,
+          userId: user.id,
+        });
+        // Don't block upload if count check fails (fail open for availability)
+      } else {
+        const dailyCount = count ?? 0;
+        
+        if (dailyCount >= 10) {
+          console.warn('[VIDEOS_POST] Daily upload limit reached:', {
+            userId: user.id,
+            dailyCount,
+            limit: 10,
+          });
+          return NextResponse.json(
+            { error: 'Daily upload limit reached' },
+            {
+              status: 429,
+              headers: {
+                'Cache-Control': 'no-store',
+              },
+            }
+          );
+        }
+      }
+    }
+
     // Insert video record with stream_uid
     const insertStartTime = Date.now();
     const { data: videoData, error: insertError } = await supabase
@@ -298,7 +355,12 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json(
         { ok: false, error: 'Failed to create video' },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store',
+          },
+        }
       );
     }
 
@@ -323,7 +385,12 @@ export async function POST(request: NextRequest) {
     console.error('[VIDEOS_POST] Unexpected error:', error);
     return NextResponse.json(
       { ok: false, error: 'Failed to create video' },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
     );
   }
 }

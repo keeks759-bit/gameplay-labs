@@ -203,35 +203,63 @@ export default function UploadPage() {
 
     // Set uploading state immediately to prevent duplicate submissions
     setUploading(true);
+    // Clear all error states at start of new attempt
     setError(null);
     setCategoryError(null);
     setTitleError(null);
+    
+    // Log upload attempt start (dev only)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[UPLOAD] Starting upload flow:', {
+        fileName: file.name,
+        fileSize: file.size,
+        title: title.trim(),
+        categoryId,
+        platform: platform.trim() || null,
+      });
+    }
 
     try {
       // Step 1: Get Cloudflare Stream direct upload URL with retry logic
-      const getDirectUploadUrl = async (attempt: number): Promise<{ uid: string; uploadURL: string }> => {
-        const delays = [300, 800, 1500];
-        const maxAttempts = 3;
+      const getDirectUploadUrl = async (): Promise<{ uid: string; uploadURL: string }> => {
+        const delays = [500, 1000];
+        const maxAttempts = 2; // Single retry for transient errors
         
         for (let i = 0; i < maxAttempts; i++) {
           try {
+            const stepStartTime = Date.now();
             const response = await fetch('/api/stream/direct-upload', {
               method: 'POST',
               cache: 'no-store',
               credentials: 'same-origin',
             });
 
+            const stepDuration = Date.now() - stepStartTime;
+            
             if (!response.ok) {
               const errorData = await response.json().catch(() => ({}));
               const error = errorData.error || 'Failed to get upload URL';
+              
+              // Log for debugging
+              if (process.env.NODE_ENV === 'development') {
+                console.error('[UPLOAD] Step 1 (get upload URL) failed:', {
+                  attempt: i + 1,
+                  status: response.status,
+                  error,
+                  duration: stepDuration,
+                });
+              }
               
               // Do NOT retry on 4xx (client errors) - throw immediately
               if (response.status >= 400 && response.status < 500) {
                 throw new Error(error || 'Upload request failed. Please check your input and try again.');
               }
               
-              // Retry only on 5xx (server errors) or network failures
+              // Retry only on 5xx (server errors) - single retry for cold start/transient errors
               if (i < maxAttempts - 1 && response.status >= 500) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[UPLOAD] Retrying Step 1 after transient error, delay:', delays[i]);
+                }
                 await new Promise(resolve => setTimeout(resolve, delays[i]));
                 continue;
               }
@@ -243,10 +271,22 @@ export default function UploadPage() {
             if (!data || !data.ok || !data.uid || !data.uploadURL) {
               // Invalid response - retry if we have attempts left
               if (i < maxAttempts - 1) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[UPLOAD] Retrying Step 1 after invalid response, delay:', delays[i]);
+                }
                 await new Promise(resolve => setTimeout(resolve, delays[i]));
                 continue;
               }
               throw new Error('Invalid response from upload service');
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[UPLOAD] Step 1 (get upload URL) succeeded:', {
+                attempt: i + 1,
+                duration: stepDuration,
+                hasUid: !!data.uid,
+                hasUploadURL: !!data.uploadURL,
+              });
             }
 
             return { uid: data.uid, uploadURL: data.uploadURL };
@@ -259,6 +299,9 @@ export default function UploadPage() {
                                    err.message.includes('Failed to fetch');
             
             if (i < maxAttempts - 1 && isNetworkError) {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[UPLOAD] Retrying Step 1 after network error, delay:', delays[i]);
+              }
               await new Promise(resolve => setTimeout(resolve, delays[i]));
               continue;
             }
@@ -266,55 +309,168 @@ export default function UploadPage() {
           }
         }
         
-        throw new Error('Upload connection failed');
+        throw new Error('Upload connection failed after retries');
       };
 
-      const { uid, uploadURL } = await getDirectUploadUrl(0);
+      const { uid, uploadURL } = await getDirectUploadUrl();
 
       // Step 2: Upload file directly to Cloudflare Stream
       const formData = new FormData();
       formData.append('file', file);
 
+      const cloudflareUploadStartTime = Date.now();
       const cloudflareUploadResponse = await fetch(uploadURL, {
         method: 'POST',
         body: formData,
       });
+      const cloudflareUploadDuration = Date.now() - cloudflareUploadStartTime;
 
       if (!cloudflareUploadResponse.ok) {
         const errorText = await cloudflareUploadResponse.text().catch(() => 'Unknown error');
+        
+        // Log for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[UPLOAD] Step 2 (Cloudflare upload) failed:', {
+            status: cloudflareUploadResponse.status,
+            error: errorText.slice(0, 200),
+            duration: cloudflareUploadDuration,
+            streamUid: uid,
+          });
+        }
+        
         throw new Error(`Upload failed: ${errorText.slice(0, 100)}`);
       }
 
-      // Step 3: Create video record in database
-      const createVideoResponse = await fetch('/api/videos', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          category_id: categoryId,
-          game_title: gameTitle.trim() || null,
-          stream_uid: uid,
-          platform: platform.trim() || null,
-        }),
-      });
-
-      if (!createVideoResponse.ok) {
-        const errorData = await createVideoResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to save video information');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[UPLOAD] Step 2 (Cloudflare upload) succeeded:', {
+          status: cloudflareUploadResponse.status,
+          duration: cloudflareUploadDuration,
+          streamUid: uid,
+        });
       }
 
-      const { ok: videoOk } = await createVideoResponse.json();
+      // Step 3: Create video record in database (with retry for transient errors)
+      const createVideoRecord = async (): Promise<void> => {
+        const delays = [500, 1000];
+        const maxAttempts = 2; // Single retry for transient errors
+        
+        for (let i = 0; i < maxAttempts; i++) {
+          try {
+            const stepStartTime = Date.now();
+            const createVideoResponse = await fetch('/api/videos', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                title: title.trim(),
+                category_id: categoryId,
+                game_title: gameTitle.trim() || null,
+                stream_uid: uid,
+                platform: platform.trim() || null,
+              }),
+            });
 
-      if (!videoOk) {
-        throw new Error('Failed to save video information');
-      }
+            const stepDuration = Date.now() - stepStartTime;
+            const videoData = await createVideoResponse.json().catch(() => null);
+
+            if (!createVideoResponse.ok) {
+              const errorMessage = videoData?.error || `Failed to save video information (${createVideoResponse.status})`;
+              
+              // Log which step failed for debugging
+              if (process.env.NODE_ENV === 'development') {
+                console.error('[UPLOAD] Step 3 (create video record) failed:', {
+                  attempt: i + 1,
+                  status: createVideoResponse.status,
+                  error: errorMessage,
+                  streamUid: uid,
+                  cloudflareUploadSucceeded: true,
+                  duration: stepDuration,
+                });
+              }
+              
+              // Do NOT retry on 4xx (client errors) - throw immediately
+              if (createVideoResponse.status >= 400 && createVideoResponse.status < 500) {
+                throw new Error(errorMessage);
+              }
+              
+              // Retry only on 5xx (server errors) - single retry for cold start/transient errors
+              if (i < maxAttempts - 1 && createVideoResponse.status >= 500) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[UPLOAD] Retrying Step 3 after transient error, delay:', delays[i]);
+                }
+                await new Promise(resolve => setTimeout(resolve, delays[i]));
+                continue;
+              }
+              
+              throw new Error(errorMessage);
+            }
+
+            if (!videoData || !videoData.ok) {
+              const errorMessage = videoData?.error || 'Failed to save video information';
+              
+              // Log for debugging
+              if (process.env.NODE_ENV === 'development') {
+                console.error('[UPLOAD] Step 3 (create video record) returned error:', {
+                  attempt: i + 1,
+                  response: videoData,
+                  streamUid: uid,
+                  cloudflareUploadSucceeded: true,
+                  duration: stepDuration,
+                });
+              }
+              
+              throw new Error(errorMessage);
+            }
+
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[UPLOAD] Step 3 (create video record) succeeded:', {
+                attempt: i + 1,
+                videoId: videoData.video?.id,
+                duration: stepDuration,
+              });
+            }
+
+            return; // Success
+          } catch (err: any) {
+            // Network errors - retry
+            const isNetworkError = !err.message || 
+                                   err.message.includes('fetch') || 
+                                   err.message.includes('network') ||
+                                   err.message.includes('Failed to fetch');
+            
+            if (i < maxAttempts - 1 && isNetworkError) {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[UPLOAD] Retrying Step 3 after network error, delay:', delays[i]);
+              }
+              await new Promise(resolve => setTimeout(resolve, delays[i]));
+              continue;
+            }
+            throw err;
+          }
+        }
+        
+        throw new Error('Failed to create video record after retries');
+      };
+
+      await createVideoRecord();
 
       // Success - redirect to home
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[UPLOAD] All steps completed successfully, redirecting to home');
+      }
       router.push('/');
     } catch (err: any) {
-      // Show friendly error message for connection failures
+      // Log error details for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[UPLOAD] Upload flow failed:', {
+          error: err.message,
+          errorName: err.name,
+          stack: err.stack?.slice(0, 500),
+        });
+      }
+      
+      // Show friendly error message
       if (err.message?.includes('connection failed') || err.message?.includes('Failed to fetch')) {
         setError('Upload connection failed. Please try again.');
       } else {

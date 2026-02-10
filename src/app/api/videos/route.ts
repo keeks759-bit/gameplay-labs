@@ -246,6 +246,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert video record with stream_uid
+    const insertStartTime = Date.now();
     const { data: videoData, error: insertError } = await supabase
       .from('videos')
       .insert({
@@ -262,13 +263,52 @@ export async function POST(request: NextRequest) {
       .select('id, stream_uid, title, created_at')
       .single();
 
+    const insertDuration = Date.now() - insertStartTime;
+
     if (insertError) {
-      console.error('[VIDEOS_POST] Insert error:', insertError);
+      console.error('[VIDEOS_POST] Insert error:', {
+        error: insertError,
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+        streamUid: stream_uid.trim(),
+        userId: user.id,
+        duration: insertDuration,
+      });
+      
+      // Check for duplicate key error (idempotency - video already exists)
+      if (insertError.code === '23505') {
+        console.warn('[VIDEOS_POST] Duplicate video detected (idempotent retry):', {
+          streamUid: stream_uid.trim(),
+          userId: user.id,
+        });
+        // Return success for idempotent retry
+        return NextResponse.json({
+          ok: true,
+          video: {
+            id: null, // Can't fetch existing without additional query
+            stream_uid: stream_uid.trim(),
+            title: title.trim(),
+            created_at: new Date().toISOString(),
+          },
+          note: 'Video already exists',
+        });
+      }
+      
       return NextResponse.json(
         { ok: false, error: 'Failed to create video' },
         { status: 500 }
       );
     }
+
+    console.log('[VIDEOS_POST] Video created successfully:', {
+      videoId: videoData.id,
+      streamUid: videoData.stream_uid,
+      title: videoData.title,
+      userId: user.id,
+      duration: insertDuration,
+    });
 
     return NextResponse.json({
       ok: true,

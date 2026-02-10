@@ -22,6 +22,9 @@ AS $$
 DECLARE
   v_user_id uuid;
   v_inserted boolean;
+  v_daily_vote_count integer;
+  v_utc_start_of_day timestamp with time zone;
+  v_is_admin boolean;
 BEGIN
   -- Get authenticated user ID
   v_user_id := auth.uid();
@@ -29,6 +32,33 @@ BEGIN
   -- Check if user is authenticated
   IF v_user_id IS NULL THEN
     RETURN jsonb_build_object('voted', false, 'error', 'Not authenticated');
+  END IF;
+  
+  -- Check if user is admin (admin UUIDs match src/lib/security/admin.ts)
+  -- Admin UUIDs: e570e7ed-d901-4af3-b1a1-77e57772a51c, afb20822-fc72-42a5-8491-d9d4a96ff5b6
+  v_is_admin := v_user_id IN (
+    'e570e7ed-d901-4af3-b1a1-77e57772a51c'::uuid,
+    'afb20822-fc72-42a5-8491-d9d4a96ff5b6'::uuid
+  );
+  
+  -- Check daily vote cap (non-admin users only)
+  IF NOT v_is_admin THEN
+    -- Get start of current UTC day
+    v_utc_start_of_day := date_trunc('day', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')) AT TIME ZONE 'UTC';
+    
+    -- Count votes created by this user today (UTC)
+    SELECT COUNT(*) INTO v_daily_vote_count
+    FROM votes
+    WHERE user_id = v_user_id
+      AND created_at >= v_utc_start_of_day;
+    
+    -- If daily limit reached, return error
+    IF v_daily_vote_count >= 200 THEN
+      RETURN jsonb_build_object(
+        'voted', false,
+        'error', 'Daily vote limit reached'
+      );
+    END IF;
   END IF;
   
   -- Attempt to insert vote (ON CONFLICT prevents duplicates)

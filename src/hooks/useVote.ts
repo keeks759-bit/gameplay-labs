@@ -108,17 +108,32 @@ export function useVote(
     setHasVoted(true);
 
     try {
-      // Call RPC function to cast vote
-      // WHY: RPC function cast_vote(p_video_id bigint) increments vote_count and handles duplicate prevention
-      const { error: rpcError } = await supabase.rpc('cast_vote', {
-        p_video_id: numericVideoId, // Must be numeric (bigint)
+      // Call API route to cast vote
+      // WHY: API route wraps RPC cast_vote and returns proper HTTP status codes (429 for daily limit)
+      const response = await fetch('/api/votes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_id: numericVideoId, // Must be numeric (bigint)
+        }),
       });
 
-      if (rpcError) {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Failed to vote';
+        
         // Rollback optimistic update on error
         setVoteCount(previousCount);
         setHasVoted(false);
-        throw rpcError;
+        
+        // Handle daily vote limit (429)
+        if (response.status === 429 && errorMessage === 'Daily vote limit reached') {
+          throw new Error('Daily vote limit reached');
+        }
+        
+        throw new Error(errorMessage);
       }
 
       // Success - optimistic update was correct

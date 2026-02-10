@@ -9,6 +9,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/email/resend';
 
+// In-memory rate limiter (best-effort, serverless-friendly)
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function checkRateLimit(key: string, limit: number, windowMs: number): { ok: true } | { ok: false; retryAfterSec: number } {
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+
+  if (!entry || now >= entry.resetAt) {
+    rateLimitStore.set(key, {
+      count: 1,
+      resetAt: now + windowMs,
+    });
+    return { ok: true };
+  }
+
+  entry.count += 1;
+
+  if (entry.count > limit) {
+    const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
+    return { ok: false, retryAfterSec };
+  }
+
+  return { ok: true };
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Verify cron secret
@@ -33,6 +63,38 @@ export async function GET(request: NextRequest) {
         }
       );
     }
+
+    // Rate limiting (after auth check)
+    // Key: x-forwarded-for first IP only
+    // If IP is missing, skip rate limiting (fail open)
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : null;
+    
+    if (ip) {
+      const rateLimitKey = `ip:${ip}`;
+      
+      // Check rate limit: 5 requests per 5 minutes
+      const rateLimitResult = checkRateLimit(rateLimitKey, 5, 5 * 60 * 1000);
+      
+      if (!rateLimitResult.ok) {
+        console.warn('[ALERTS_DAILY] Rate limit exceeded:', {
+          key: rateLimitKey,
+          path: request.nextUrl.pathname,
+          retryAfterSec: rateLimitResult.retryAfterSec,
+        });
+        return NextResponse.json(
+          { error: 'Too many requests' },
+          {
+            status: 429,
+            headers: {
+              'Cache-Control': 'no-store',
+              'Retry-After': rateLimitResult.retryAfterSec.toString(),
+            },
+          }
+        );
+      }
+    }
+    // If IP is missing, skip rate limiting (fail open)
 
     // Get Supabase client
     const supabase = await createServerSupabaseClient();

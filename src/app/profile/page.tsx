@@ -28,6 +28,16 @@ export default function ProfilePage() {
   const [uploads, setUploads] = useState<VideoWithCategoryAndPlatform[]>([]);
   const [uploadsLoading, setUploadsLoading] = useState(false);
   const [uploadsError, setUploadsError] = useState<string | null>(null);
+  
+  // Edit title state
+  const [editingVideoId, setEditingVideoId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  
+  // Delete video state
+  const [deletingVideoId, setDeletingVideoId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState('');
   const [platforms, setPlatforms] = useState<string[]>([]);
@@ -494,42 +504,176 @@ export default function ProfilePage() {
             {!uploadsLoading && !uploadsError && uploads.length > 0 && (
               <div className="space-y-3">
                 {uploads.map((video) => (
-                  <Link
+                  <div
                     key={video.id}
-                    href={`/clips/${video.id}`}
                     className="block rounded-lg border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/50 dark:hover:bg-zinc-800"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 mb-1">
-                          {video.title}
-                        </h3>
-                        <div className="flex items-center gap-2 flex-wrap text-xs text-zinc-500 dark:text-zinc-500">
-                          {video.categories?.name && (
-                            <span>{video.categories.name}</span>
-                          )}
-                          {video.categories?.name && <span>•</span>}
-                          <span>{video.vote_count} {video.vote_count === 1 ? 'vote' : 'votes'}</span>
-                          <span>•</span>
-                          <span>{new Date(video.created_at).toLocaleDateString()}</span>
-                          {video.platform && video.platform.trim() && (
-                            <>
+                        {editingVideoId === Number(video.id) ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              disabled={editSaving}
+                              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-500 transition-colors focus:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:ring-offset-0 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-zinc-600 dark:focus:ring-zinc-600"
+                              placeholder="Enter title"
+                              maxLength={200}
+                            />
+                            {editError && (
+                              <p className="text-xs text-red-600 dark:text-red-400">{editError}</p>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  if (!editTitle.trim()) {
+                                    setEditError('Title cannot be empty');
+                                    return;
+                                  }
+                                  setEditSaving(true);
+                                  setEditError(null);
+                                  try {
+                                    const response = await fetch(`/api/videos/${video.id}`, {
+                                      method: 'PATCH',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify({ title: editTitle.trim() }),
+                                    });
+                                    
+                                    if (!response.ok) {
+                                      const errorData = await response.json().catch(() => ({}));
+                                      throw new Error(errorData.error || 'Failed to update title');
+                                    }
+                                    
+                                    const result = await response.json();
+                                    if (result.ok && result.video) {
+                                      // Update local state
+                                      setUploads(uploads.map(v => 
+                                        Number(v.id) === Number(video.id)
+                                          ? { ...v, title: result.video.title }
+                                          : v
+                                      ));
+                                      setEditingVideoId(null);
+                                      setEditTitle('');
+                                      setEditError(null);
+                                    }
+                                  } catch (err: any) {
+                                    setEditError(err.message || 'Failed to update title');
+                                  } finally {
+                                    setEditSaving(false);
+                                  }
+                                }}
+                                disabled={editSaving || !editTitle.trim()}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+                              >
+                                {editSaving ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingVideoId(null);
+                                  setEditTitle('');
+                                  setEditError(null);
+                                }}
+                                disabled={editSaving}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="font-semibold text-base text-zinc-900 dark:text-zinc-50 line-clamp-2 mb-1">
+                              {video.title}
+                            </h3>
+                            <div className="flex items-center gap-2 flex-wrap text-xs text-zinc-500 dark:text-zinc-500">
+                              {video.categories?.name && (
+                                <span>{video.categories.name}</span>
+                              )}
+                              {video.categories?.name && <span>•</span>}
+                              <span>{video.vote_count} {video.vote_count === 1 ? 'vote' : 'votes'}</span>
                               <span>•</span>
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-                                {video.platform === 'pc' ? 'PC' :
-                                 video.platform === 'xbox' ? 'Xbox' :
-                                 video.platform === 'playstation' ? 'PlayStation' :
-                                 video.platform === 'switch' ? 'Switch' :
-                                 video.platform === 'mobile' ? 'Mobile' :
-                                 video.platform === 'other' ? 'Other' :
-                                 video.platform}
-                              </span>
-                            </>
-                          )}
-                        </div>
+                              <span>{new Date(video.created_at).toLocaleDateString()}</span>
+                              {video.platform && video.platform.trim() && (
+                                <>
+                                  <span>•</span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
+                                    {video.platform === 'pc' ? 'PC' :
+                                     video.platform === 'xbox' ? 'Xbox' :
+                                     video.platform === 'playstation' ? 'PlayStation' :
+                                     video.platform === 'switch' ? 'Switch' :
+                                     video.platform === 'mobile' ? 'Mobile' :
+                                     video.platform === 'other' ? 'Other' :
+                                     video.platform}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </>
+                        )}
+                        {deleteError && deletingVideoId === Number(video.id) && (
+                          <p className="text-xs text-red-600 dark:text-red-400 mt-2">{deleteError}</p>
+                        )}
                       </div>
+                      {editingVideoId !== Number(video.id) && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setEditingVideoId(Number(video.id));
+                              setEditTitle(video.title);
+                              setEditError(null);
+                            }}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              const confirmed = window.confirm(
+                                'Are you sure you want to delete this video? This action cannot be undone.'
+                              );
+                              if (!confirmed) return;
+
+                              setDeletingVideoId(Number(video.id));
+                              setDeleteError(null);
+
+                              try {
+                                const response = await fetch(`/api/videos/${video.id}`, {
+                                  method: 'DELETE',
+                                });
+
+                                if (!response.ok) {
+                                  const errorData = await response.json().catch(() => ({}));
+                                  throw new Error(errorData.error || 'Failed to delete video');
+                                }
+
+                                // Remove from local state immediately
+                                setUploads(uploads.filter(v => Number(v.id) !== Number(video.id)));
+                                setDeletingVideoId(null);
+                              } catch (err: any) {
+                                setDeleteError(err.message || 'Failed to delete video');
+                                setDeletingVideoId(null);
+                              }
+                            }}
+                            disabled={deletingVideoId === Number(video.id)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                          >
+                            {deletingVideoId === Number(video.id) ? 'Deleting...' : 'Delete'}
+                          </button>
+                          <Link
+                            href={`/clips/${video.id}`}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-100"
+                          >
+                            View
+                          </Link>
+                        </div>
+                      )}
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}

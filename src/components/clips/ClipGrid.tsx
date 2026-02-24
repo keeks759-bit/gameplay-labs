@@ -6,6 +6,7 @@
  */
 
 import ClipCard from './ClipCard';
+import AtomIcon from '../AtomIcon';
 import { VideoWithCategory } from '@/types/database';
 
 type ClipGridProps = {
@@ -63,8 +64,23 @@ export default function ClipGrid({ videos, isLoading }: ClipGridProps) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
-      {videos.map((video) => (
-        <ClipCard key={video.id} video={video} />
+      {videos.map((video, index) => (
+        <div
+          key={video.id}
+          className="relative"
+        >
+          {index === 0 && (
+            <div
+              className="absolute top-2 left-2 z-20 inline-flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-900 shadow-sm ring-1 ring-zinc-200/80 backdrop-blur-sm dark:bg-zinc-900/80 dark:text-zinc-50 dark:ring-zinc-700/80"
+              aria-label="Current top clip number one"
+            >
+              <span>Current</span>
+              <AtomIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5 lg:h-4 lg:w-4" />
+              <span>#1</span>
+            </div>
+          )}
+          <ClipCard video={video} />
+        </div>
       ))}
     </div>
   );

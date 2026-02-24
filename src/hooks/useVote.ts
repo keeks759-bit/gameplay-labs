@@ -91,56 +91,88 @@ export function useVote(
       return;
     }
 
-    // Prevent double voting
-    if (hasVoted) {
-      setError('You have already voted for this clip');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
     setIsVoting(true);
     setError(null);
 
     // Optimistically update vote count
     // WHY: Immediate UI feedback improves perceived performance
     const previousCount = voteCount;
-    setVoteCount(voteCount + 1);
-    setHasVoted(true);
+    const previousHasVoted = hasVoted;
 
     try {
-      // Call API route to cast vote
-      // WHY: API route wraps RPC cast_vote and returns proper HTTP status codes (429 for daily limit)
-      const response = await fetch('/api/votes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          video_id: numericVideoId, // Must be numeric (bigint)
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || 'Failed to vote';
-        
-        // Rollback optimistic update on error
-        setVoteCount(previousCount);
+      if (hasVoted) {
+        // User has already voted - unvote (DELETE)
+        // Optimistically decrement vote count
+        // Note: Actual decrement amount depends on user's weight (handled by DB trigger)
+        setVoteCount(Math.max(0, voteCount - 1)); // Conservative estimate (actual may be 33/21/17)
         setHasVoted(false);
-        
-        // Handle daily vote limit (429)
-        if (response.status === 429 && errorMessage === 'Daily vote limit reached') {
-          throw new Error('Daily vote limit reached');
-        }
-        
-        throw new Error(errorMessage);
-      }
 
-      // Success - optimistic update was correct
+        const response = await fetch('/api/votes', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            video_id: numericVideoId,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.error || 'Failed to unvote';
+          
+          // Rollback optimistic update on error
+          setVoteCount(previousCount);
+          setHasVoted(previousHasVoted);
+          
+          throw new Error(errorMessage);
+        }
+
+        // Success - refresh vote count from server to get accurate weighted value
+        // Note: We don't know the exact weight client-side, so we'll rely on the UI
+        // to refresh from the video data, or we could fetch it here
+      } else {
+        // User has not voted - vote (POST)
+        // Optimistically increment vote count
+        // Note: Actual increment amount depends on user's weight (handled by DB trigger)
+        setVoteCount(voteCount + 1); // Conservative estimate (actual may be 33/21/17)
+        setHasVoted(true);
+
+        // Call API route to cast vote
+        // WHY: API route wraps RPC cast_vote and returns proper HTTP status codes (429 for daily limit)
+        const response = await fetch('/api/votes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            video_id: numericVideoId, // Must be numeric (bigint)
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.error || 'Failed to vote';
+          
+          // Rollback optimistic update on error
+          setVoteCount(previousCount);
+          setHasVoted(previousHasVoted);
+          
+          // Handle daily vote limit (429)
+          if (response.status === 429 && errorMessage === 'Daily vote limit reached') {
+            throw new Error('Daily vote limit reached');
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        // Success - optimistic update was correct
+        // Note: Actual vote_count may be higher if user has weight > 1
+      }
     } catch (err: any) {
       // Rollback optimistic update
       setVoteCount(previousCount);
-      setHasVoted(false);
+      setHasVoted(previousHasVoted);
       setError(err.message || 'Failed to vote. Please try again.');
       setTimeout(() => setError(null), 3000);
     } finally {

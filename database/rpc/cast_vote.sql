@@ -1,8 +1,7 @@
--- ============================================
 -- RPC FUNCTION: cast_vote
 -- ============================================
 -- WHY: Atomic vote insertion with duplicate prevention
--- Uses existing trigger to update vote_count automatically
+-- Uses vote_weight() to update videos.vote_count with weighted values
 -- Idempotent: calling twice for same user/video does not double-increment
 -- 
 -- SCHEMA REQUIREMENTS:
@@ -10,8 +9,7 @@
 -- - Requires videos.id to be BIGINT/INTEGER (numeric, not UUID)
 -- - Requires votes.video_id to be BIGINT/INTEGER matching videos.id
 -- - Requires UNIQUE(video_id, user_id) constraint on votes table
--- - Relies on existing trigger (update_vote_count_trigger) to update videos.vote_count
---   If the trigger does not exist, vote_count will not auto-increment
+-- - Relies on public.vote_weight(user_id) to compute vote weight
 
 CREATE OR REPLACE FUNCTION cast_vote(p_video_id bigint)
 RETURNS jsonb
@@ -68,6 +66,13 @@ BEGIN
   
   -- Check if insert actually occurred
   v_inserted := FOUND;
+  
+  -- If the row was inserted, apply weighted vote_count increment
+  IF v_inserted THEN
+    UPDATE videos
+    SET vote_count = vote_count + public.vote_weight(v_user_id)
+    WHERE id = p_video_id;
+  END IF;
   
   -- Return result
   IF v_inserted THEN

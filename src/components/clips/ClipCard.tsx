@@ -660,16 +660,16 @@ export default function ClipCard({ video }: ClipCardProps) {
             {video.categories?.name || 'Uncategorized'}
           </span>
           <div className="flex items-center gap-2 md:gap-2.5">
-            {/* Vote button - disabled if already voted or voting in progress */}
+            {/* Vote button - disabled only while voting is in progress */}
             <button
               onClick={handleVote}
-              disabled={hasVoted || isVoting}
+              disabled={isVoting}
               className={`flex items-center gap-1.5 rounded-full px-3 py-2 md:px-3 md:py-1.5 transition-all touch-manipulation ${
                 hasVoted
-                  ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed'
+                  ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'
                   : 'bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 dark:bg-zinc-800/50 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50'
               } disabled:opacity-50 disabled:cursor-not-allowed shadow-sm`}
-              title={hasVoted ? 'You have already voted' : 'Vote for this clip'}
+              title={hasVoted ? 'Remove your vote' : 'Vote for this clip'}
             >
               <svg
                 className="h-4 w-4 md:h-4 md:w-4"

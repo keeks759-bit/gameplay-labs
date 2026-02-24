@@ -17,7 +17,6 @@ SET search_path = public
 AS $$
 DECLARE
   v_user_id uuid;
-  v_deleted boolean;
 BEGIN
   -- Get authenticated user ID
   v_user_id := auth.uid();
@@ -32,18 +31,25 @@ BEGIN
   WHERE video_id = p_video_id
     AND user_id = v_user_id;
   
-  v_deleted := FOUND;
+  -- Recalculate weighted vote_count from all current votes for this video.
+  -- This keeps vote_count consistent even if previous logic or weights changed.
+  UPDATE videos v
+  SET vote_count = COALESCE(
+    (
+      SELECT SUM(public.vote_weight(votes.user_id))
+      FROM votes
+      WHERE votes.video_id = v.id
+    ),
+    0
+  )
+  WHERE v.id = p_video_id;
   
-  -- If a row was deleted, apply weighted decrement
-  IF v_deleted THEN
-    UPDATE videos
-    SET vote_count = GREATEST(0, vote_count - public.vote_weight(v_user_id))
-    WHERE id = p_video_id;
-    
+  -- If a row was deleted, report unvoted=true; otherwise, treat as no-op
+  IF FOUND THEN
     RETURN jsonb_build_object('unvoted', true);
   END IF;
   
-  -- No row deleted -> vote not found
+  -- No row deleted -> vote not found (idempotent "no-op")
   RETURN jsonb_build_object('unvoted', false, 'error', 'Vote not found');
 END;
 $$;

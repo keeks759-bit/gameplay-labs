@@ -67,12 +67,18 @@ BEGIN
   -- Check if insert actually occurred
   v_inserted := FOUND;
   
-  -- If the row was inserted, apply weighted vote_count increment
-  IF v_inserted THEN
-    UPDATE videos
-    SET vote_count = vote_count + public.vote_weight(v_user_id)
-    WHERE id = p_video_id;
-  END IF;
+  -- Recalculate weighted vote_count from all current votes for this video.
+  -- This avoids drift if previous logic changed or triggers were used.
+  UPDATE videos v
+  SET vote_count = COALESCE(
+    (
+      SELECT SUM(public.vote_weight(votes.user_id))
+      FROM votes
+      WHERE votes.video_id = v.id
+    ),
+    0
+  )
+  WHERE v.id = p_video_id;
   
   -- Return result
   IF v_inserted THEN
